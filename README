@@ -1,0 +1,9 @@
+loop4r_leds for the leds on the FCB1010 with the EurekaProm
+set to I/O mode. The goal is to allow control of sooperlooper via just the
+controller and have the LEDs etc reflect the state of sooperlooper.
+
+Forked from the https://github.com/gbevin/ReceiveMIDI and
+https://github.com/gbevin/SendMIDI source as a MIDI starting point.
+
+This works in conjunction with the loop4r_read program at
+https://github.com/atinm/loop4r_read.
