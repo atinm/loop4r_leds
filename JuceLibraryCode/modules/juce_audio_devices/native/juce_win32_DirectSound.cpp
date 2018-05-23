@@ -2,28 +2,38 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
+} // (juce namespace)
+
 extern "C"
 {
     // Declare just the minimum number of interfaces for the DSound objects that we need..
-    struct DSBUFFERDESC
+    typedef struct typeDSBUFFERDESC
     {
         DWORD dwSize;
         DWORD dwFlags;
@@ -31,7 +41,7 @@ extern "C"
         DWORD dwReserved;
         LPWAVEFORMATEX lpwfxFormat;
         GUID guid3DAlgorithm;
-    };
+    } DSBUFFERDESC;
 
     struct IDirectSoundBuffer;
 
@@ -80,14 +90,14 @@ extern "C"
     };
 
     //==============================================================================
-    struct DSCBUFFERDESC
+    typedef struct typeDSCBUFFERDESC
     {
         DWORD dwSize;
         DWORD dwFlags;
         DWORD dwBufferBytes;
         DWORD dwReserved;
         LPWAVEFORMATEX lpwfxFormat;
-    };
+    } DSCBUFFERDESC;
 
     struct IDirectSoundCaptureBuffer;
 
@@ -266,10 +276,6 @@ public:
         pDirectSound = nullptr;
         pOutputBuffer = nullptr;
         writeOffset = 0;
-        xruns = 0;
-
-        firstPlayTime = true;
-        lastPlayTime = 0;
 
         String error;
         HRESULT hr = E_NOINTERFACE;
@@ -280,7 +286,6 @@ public:
         if (SUCCEEDED (hr))
         {
             bytesPerBuffer = (bufferSizeSamples * (bitDepth >> 2)) & ~15;
-            ticksPerBuffer = bytesPerBuffer * Time::getHighResolutionTicksPerSecond() / (sampleRate * (bitDepth >> 2));
             totalBytesPerBuffer = (blocksPerOverallBuffer * bytesPerBuffer) & ~15;
             const int numChannels = 2;
 
@@ -353,7 +358,7 @@ public:
                                         hr = pOutputBuffer->Play (0, 0, 1 /* DSBPLAY_LOOPING */);
 
                                         if (SUCCEEDED (hr))
-                                            return {};
+                                            return String();
                                     }
                                 }
                             }
@@ -402,18 +407,6 @@ public:
             return true;
         }
 
-        auto currentPlayTime = Time::getHighResolutionTicks();
-        if (! firstPlayTime)
-        {
-            auto expectedBuffers = (currentPlayTime - lastPlayTime) / ticksPerBuffer;
-
-            playCursor += static_cast<DWORD> (expectedBuffers * bytesPerBuffer);
-        }
-        else
-            firstPlayTime = false;
-
-        lastPlayTime = currentPlayTime;
-
         int playWriteGap = (int) (writeCursor - playCursor);
         if (playWriteGap < 0)
             playWriteGap += totalBytesPerBuffer;
@@ -426,9 +419,6 @@ public:
         {
             writeOffset = writeCursor;
             bytesEmpty = totalBytesPerBuffer - playWriteGap;
-
-            // buffer underflow
-            xruns++;
         }
 
         if (bytesEmpty >= bytesPerBuffer)
@@ -500,7 +490,7 @@ public:
         }
     }
 
-    int bitDepth, xruns;
+    int bitDepth;
     bool doneFlag;
 
 private:
@@ -515,9 +505,6 @@ private:
     DWORD writeOffset;
     int totalBytesPerBuffer, bytesPerBuffer;
     unsigned int lastPlayCursor;
-
-    bool firstPlayTime;
-    int64 lastPlayTime, ticksPerBuffer;
 
     static inline int convertInputValues (const float l, const float r) noexcept
     {
@@ -534,8 +521,9 @@ struct DSoundInternalInChannel
 public:
     DSoundInternalInChannel (const String& name_, const GUID& guid_, int rate,
                              int bufferSize, float* left, float* right)
-        : name (name_), guid (guid_), sampleRate (rate),
-          bufferSizeSamples (bufferSize), leftBuffer (left), rightBuffer (right)
+        : bitDepth (16), name (name_), guid (guid_), sampleRate (rate),
+          bufferSizeSamples (bufferSize), leftBuffer (left), rightBuffer (right),
+          pDirectSound (nullptr), pDirectSoundCapture (nullptr), pInputBuffer (nullptr)
     {
     }
 
@@ -613,7 +601,7 @@ public:
                 hr = pInputBuffer->Start (1 /* DSCBSTART_LOOPING */);
 
                 if (SUCCEEDED (hr))
-                    return {};
+                    return String();
             }
         }
 
@@ -646,7 +634,6 @@ public:
             return true;
 
         int bytesFilled = (int) (readPos - readOffset);
-
         if (bytesFilled < 0)
             bytesFilled += totalBytesPerBuffer;
 
@@ -715,7 +702,7 @@ public:
 
     unsigned int readOffset;
     int bytesPerBuffer, totalBytesPerBuffer;
-    int bitDepth = 16;
+    int bitDepth;
     bool doneFlag;
 
 private:
@@ -725,9 +712,9 @@ private:
     float* leftBuffer;
     float* rightBuffer;
 
-    IDirectSound* pDirectSound = nullptr;
-    IDirectSoundCapture* pDirectSoundCapture = nullptr;
-    IDirectSoundCaptureBuffer* pInputBuffer = nullptr;
+    IDirectSound* pDirectSound;
+    IDirectSoundCapture* pDirectSoundCapture;
+    IDirectSoundCaptureBuffer* pInputBuffer;
 
     JUCE_DECLARE_NON_COPYABLE (DSoundInternalInChannel)
 };
@@ -741,9 +728,14 @@ public:
                          const int outputDeviceIndex_,
                          const int inputDeviceIndex_)
         : AudioIODevice (deviceName, "DirectSound"),
-          Thread ("JUCE DSound"),
+          Thread ("Juce DSound"),
           outputDeviceIndex (outputDeviceIndex_),
-          inputDeviceIndex (inputDeviceIndex_)
+          inputDeviceIndex (inputDeviceIndex_),
+          isOpen_ (false),
+          isStarted (false),
+          bufferSizeSamples (0),
+          sampleRate (0.0),
+          callback (nullptr)
     {
         if (outputDeviceIndex_ >= 0)
         {
@@ -796,7 +788,8 @@ public:
 
     Array<double> getAvailableSampleRates() override
     {
-        return { 44100.0, 48000.0, 88200.0, 96000.0 };
+        static const double rates[] = { 44100.0, 48000.0, 88200.0, 96000.0 };
+        return Array<double> (rates, numElementsInArray (rates));
     }
 
     Array<int> getAvailableBufferSizes() override
@@ -856,7 +849,7 @@ public:
     {
         if (isStarted)
         {
-            auto* callbackLocal = callback;
+            AudioIODeviceCallback* const callbackLocal = callback;
 
             {
                 const ScopedLock sl (startStopLock);
@@ -871,30 +864,25 @@ public:
     bool isPlaying() override            { return isStarted && isOpen_ && isThreadRunning(); }
     String getLastError() override       { return lastError; }
 
-    int getXRunCount() const noexcept override
-    {
-        return outChans[0] != nullptr ? outChans[0]->xruns : -1;
-    }
-
     //==============================================================================
     StringArray inChannels, outChannels;
     int outputDeviceIndex, inputDeviceIndex;
 
 private:
-    bool isOpen_ = false;
-    bool isStarted = false;
+    bool isOpen_;
+    bool isStarted;
     String lastError;
 
     OwnedArray<DSoundInternalInChannel> inChans;
     OwnedArray<DSoundInternalOutChannel> outChans;
     WaitableEvent startEvent;
 
-    int bufferSizeSamples = 0;
-    double sampleRate = 0;
+    int bufferSizeSamples;
+    double sampleRate;
     BigInteger enabledInputs, enabledOutputs;
-    AudioBuffer<float> inputBuffers, outputBuffers;
+    AudioSampleBuffer inputBuffers, outputBuffers;
 
-    AudioIODeviceCallback* callback = nullptr;
+    AudioIODeviceCallback* callback;
     CriticalSection startStopLock;
 
     String openDevice (const BigInteger& inputChannels,
@@ -908,6 +896,8 @@ private:
 
         inChans.clear();
         outChans.clear();
+        inputBuffers.setSize (1, 1);
+        outputBuffers.setSize (1, 1);
     }
 
     void resync()
@@ -1109,7 +1099,7 @@ String DSoundAudioIODevice::openDevice (const BigInteger& inputChannels,
                             enabledInputs.getHighestBit() + 1 - inChannels.size(),
                             false);
 
-    inputBuffers.setSize (enabledInputs.countNumberOfSetBits(), bufferSizeSamples);
+    inputBuffers.setSize (jmax (1, enabledInputs.countNumberOfSetBits()), bufferSizeSamples);
     inputBuffers.clear();
     int numIns = 0;
 
@@ -1130,7 +1120,7 @@ String DSoundAudioIODevice::openDevice (const BigInteger& inputChannels,
                              enabledOutputs.getHighestBit() + 1 - outChannels.size(),
                              false);
 
-    outputBuffers.setSize (enabledOutputs.countNumberOfSetBits(), bufferSizeSamples);
+    outputBuffers.setSize (jmax (1, enabledOutputs.countNumberOfSetBits()), bufferSizeSamples);
     outputBuffers.clear();
     int numOuts = 0;
 
@@ -1210,7 +1200,8 @@ class DSoundAudioIODeviceType  : public AudioIODeviceType,
 public:
     DSoundAudioIODeviceType()
         : AudioIODeviceType ("DirectSound"),
-          DeviceChangeDetector (L"DirectSound")
+          DeviceChangeDetector (L"DirectSound"),
+          hasScanned (false)
     {
         initialiseDSoundFunctions();
     }
@@ -1266,7 +1257,7 @@ public:
 
 private:
     DSoundDeviceList deviceList;
-    bool hasScanned = false;
+    bool hasScanned;
 
     void systemDeviceChanged() override
     {
@@ -1288,5 +1279,3 @@ AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_DirectSound()
 {
     return new DSoundAudioIODeviceType();
 }
-
-} // namespace juce

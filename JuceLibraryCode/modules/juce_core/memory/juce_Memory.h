@@ -2,26 +2,34 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_MEMORY_H_INCLUDED
+#define JUCE_MEMORY_H_INCLUDED
 
 //==============================================================================
 /** Fills a block of memory with zeros. */
@@ -33,7 +41,7 @@ inline void zerostruct (Type& structure) noexcept                   { memset (&s
 
 /** Delete an object pointer, and sets the pointer to null.
 
-    Remember that it's not good c++ practice to use delete directly - always try to use a std::unique_ptr
+    Remember that it's not good c++ practice to use delete directly - always try to use a ScopedPointer
     or other automatic lifetime-management system rather than resorting to deleting raw pointers!
 */
 template <typename Type>
@@ -45,14 +53,6 @@ inline void deleteAndZero (Type& pointer)                           { delete poi
 */
 template <typename Type, typename IntegerType>
 inline Type* addBytesToPointer (Type* basePointer, IntegerType bytes) noexcept  { return (Type*) (((char*) basePointer) + bytes); }
-
-/** A handy function to round up a pointer to the nearest multiple of a given number of bytes.
-    alignmentBytes must be a power of two. */
-template <typename Type, typename IntegerType>
-inline Type* snapPointerToAlignment (Type* basePointer, IntegerType alignmentBytes) noexcept
-{
-    return (Type*) ((((size_t) basePointer) + (alignmentBytes - 1)) & ~(alignmentBytes - 1));
-}
 
 /** A handy function which returns the difference between any two pointers, in bytes.
     The address of the second pointer is subtracted from the first, and the difference in bytes is returned.
@@ -73,6 +73,7 @@ inline Type readUnaligned (const void* srcPtr) noexcept
 {
     Type value;
     memcpy (&value, srcPtr, sizeof (Type));
+
     return value;
 }
 
@@ -80,7 +81,7 @@ inline Type readUnaligned (const void* srcPtr) noexcept
 template <typename Type>
 inline void writeUnaligned (void* dstPtr, Type value) noexcept
 {
-    memcpy (dstPtr, &value, sizeof (Type));
+    memcpy (dstPtr, &value, sizeof(Type));
 }
 
 //==============================================================================
@@ -88,8 +89,6 @@ inline void writeUnaligned (void* dstPtr, Type value) noexcept
 
  /** A handy C++ wrapper that creates and deletes an NSAutoreleasePool object using RAII.
      You should use the JUCE_AUTORELEASEPOOL macro to create a local auto-release pool on the stack.
-
-     @tags{Core}
  */
  class JUCE_API  ScopedAutoReleasePool
  {
@@ -143,4 +142,5 @@ inline void writeUnaligned (void* dstPtr, Type value) noexcept
  #define juce_UseDebuggingNewOperator
 #endif
 
-} // namespace juce
+
+#endif   // JUCE_MEMORY_H_INCLUDED

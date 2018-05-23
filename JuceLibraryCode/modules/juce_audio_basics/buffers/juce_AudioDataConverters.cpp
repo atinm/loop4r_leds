@@ -2,26 +2,31 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
-
-namespace juce
-{
 
 void AudioDataConverters::convertFloatToInt16LE (const float* source, void* dest, int numSamples, const int destBytesPerSample)
 {
@@ -312,7 +317,7 @@ void AudioDataConverters::convertInt24BEToFloat (const void* const source, float
 
 void AudioDataConverters::convertInt32LEToFloat (const void* const source, float* const dest, int numSamples, const int srcBytesPerSample)
 {
-    const auto scale = 1.0f / (float) 0x7fffffff;
+    const float scale = 1.0f / 0x7fffffff;
     const char* intData = static_cast<const char*> (source);
 
     if (source != (void*) dest || srcBytesPerSample >= 4)
@@ -337,7 +342,7 @@ void AudioDataConverters::convertInt32LEToFloat (const void* const source, float
 
 void AudioDataConverters::convertInt32BEToFloat (const void* const source, float* const dest, int numSamples, const int srcBytesPerSample)
 {
-    const auto scale = 1.0f / (float) 0x7fffffff;
+    const float scale = 1.0f / 0x7fffffff;
     const char* intData = static_cast<const char*> (source);
 
     if (source != (void*) dest || srcBytesPerSample >= 4)
@@ -478,7 +483,7 @@ void AudioDataConverters::deinterleaveSamples (const float* const source,
 class AudioConversionTests  : public UnitTest
 {
 public:
-    AudioConversionTests() : UnitTest ("Audio data conversion", "Audio") {}
+    AudioConversionTests() : UnitTest ("Audio data conversion") {}
 
     template <class F1, class E1, class F2, class E2>
     struct Test5
@@ -514,13 +519,13 @@ public:
             }
 
             // convert data from the source to dest format..
-            std::unique_ptr<AudioData::Converter> conv (new AudioData::ConverterInstance <AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>,
-                                                                                          AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst>>());
+            ScopedPointer<AudioData::Converter> conv (new AudioData::ConverterInstance <AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>,
+                                                                                        AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::NonConst> >());
             conv->convertSamples (inPlace ? reversed : converted, original, numSamples);
 
             // ..and back again..
-            conv.reset (new AudioData::ConverterInstance <AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>,
-                                                          AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst>>());
+            conv = new AudioData::ConverterInstance <AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>,
+                                                     AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst> >();
             if (! inPlace)
                 zeromem (reversed, sizeof (reversed));
 
@@ -532,7 +537,7 @@ public:
                 AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const> d2 (reversed);
 
                 const int errorMargin = 2 * AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution()
-                                          + AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution();
+                                            + AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution();
 
                 for (int i = 0; i < numSamples; ++i)
                 {
@@ -599,5 +604,3 @@ public:
 static AudioConversionTests audioConversionUnitTests;
 
 #endif
-
-} // namespace juce

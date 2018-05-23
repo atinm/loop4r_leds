@@ -2,33 +2,38 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
-
-namespace juce
-{
 
 namespace TimeHelpers
 {
     static std::tm millisToLocal (int64 millis) noexcept
     {
        #if JUCE_WINDOWS && JUCE_MINGW
-        auto now = (time_t) (millis / 1000);
+        time_t now = (time_t) (millis / 1000);
         return *localtime (&now);
 
        #elif JUCE_WINDOWS
@@ -42,7 +47,7 @@ namespace TimeHelpers
 
        #else
         std::tm result;
-        auto now = (time_t) (millis / 1000);
+        time_t now = (time_t) (millis / 1000);
 
         if (localtime_r (&now, &result) == nullptr)
             zerostruct (result);
@@ -54,7 +59,7 @@ namespace TimeHelpers
     static std::tm millisToUTC (int64 millis) noexcept
     {
        #if JUCE_WINDOWS && JUCE_MINGW
-        auto now = (time_t) (millis / 1000);
+        time_t now = (time_t) (millis / 1000);
         return *gmtime (&now);
 
        #elif JUCE_WINDOWS
@@ -68,7 +73,7 @@ namespace TimeHelpers
 
        #else
         std::tm result;
-        auto now = (time_t) (millis / 1000);
+        time_t now = (time_t) (millis / 1000);
 
         if (gmtime_r (&now, &result) == nullptr)
             zerostruct (result);
@@ -79,7 +84,7 @@ namespace TimeHelpers
 
     static int getUTCOffsetSeconds (const int64 millis) noexcept
     {
-        auto utc = millisToUTC (millis);
+        std::tm utc = millisToUTC (millis);
         utc.tm_isdst = -1;  // Treat this UTC time as local to find the offset
 
         return (int) ((millis / 1000) - (int64) mktime (&utc));
@@ -103,21 +108,21 @@ namespace TimeHelpers
 
        #ifdef JUCE_MSVC
         if (tm->tm_year < -1900 || tm->tm_year > 8099)
-            return {};   // Visual Studio's library can only handle 0 -> 9999 AD
+            return String();   // Visual Studio's library can only handle 0 -> 9999 AD
         #endif
 
         for (size_t bufferSize = 256; ; bufferSize += 256)
         {
             HeapBlock<StringType::CharType> buffer (bufferSize);
 
-            auto numChars =
-                       #if JUCE_ANDROID
-                        strftime (buffer, bufferSize - 1, format.toUTF8(), tm);
-                       #elif JUCE_WINDOWS
-                        wcsftime (buffer, bufferSize - 1, format.toWideCharPointer(), tm);
-                       #else
-                        wcsftime (buffer, bufferSize - 1, format.toUTF32(), tm);
-                       #endif
+            const size_t numChars =
+                           #if JUCE_ANDROID
+                            strftime (buffer, bufferSize - 1, format.toUTF8(), tm);
+                           #elif JUCE_WINDOWS
+                            wcsftime (buffer, bufferSize - 1, format.toWideCharPointer(), tm);
+                           #else
+                            wcsftime (buffer, bufferSize - 1, format.toUTF32(), tm);
+                           #endif
 
             if (numChars > 0 || format.isEmpty())
                 return String (StringType (buffer),
@@ -177,7 +182,7 @@ namespace TimeHelpers
                 + t.tm_sec;
     }
 
-    static Atomic<uint32> lastMSCounterValue { (uint32) 0 };
+    static uint32 lastMSCounterValue = 0;
 }
 
 //==============================================================================
@@ -189,13 +194,18 @@ Time::Time (const Time& other) noexcept  : millisSinceEpoch (other.millisSinceEp
 {
 }
 
-Time::Time (int64 ms) noexcept  : millisSinceEpoch (ms)
+Time::Time (const int64 ms) noexcept  : millisSinceEpoch (ms)
 {
 }
 
-Time::Time (int year, int month, int day,
-            int hours, int minutes, int seconds, int milliseconds,
-            bool useLocalTime) noexcept
+Time::Time (const int year,
+            const int month,
+            const int day,
+            const int hours,
+            const int minutes,
+            const int seconds,
+            const int milliseconds,
+            const bool useLocalTime) noexcept
 {
     std::tm t;
     t.tm_year   = year - 1900;
@@ -245,14 +255,14 @@ uint32 juce_millisecondsSinceStartup() noexcept;
 
 uint32 Time::getMillisecondCounter() noexcept
 {
-    auto now = juce_millisecondsSinceStartup();
+    const uint32 now = juce_millisecondsSinceStartup();
 
-    if (now < TimeHelpers::lastMSCounterValue.get())
+    if (now < TimeHelpers::lastMSCounterValue)
     {
         // in multi-threaded apps this might be called concurrently, so
         // make sure that our last counter value only increases and doesn't
         // go backwards..
-        if (now < TimeHelpers::lastMSCounterValue.get() - (uint32) 1000)
+        if (now < TimeHelpers::lastMSCounterValue - 1000)
             TimeHelpers::lastMSCounterValue = now;
     }
     else
@@ -265,20 +275,22 @@ uint32 Time::getMillisecondCounter() noexcept
 
 uint32 Time::getApproximateMillisecondCounter() noexcept
 {
-    auto t = TimeHelpers::lastMSCounterValue.get();
-    return t == 0 ? getMillisecondCounter() : t;
+    if (TimeHelpers::lastMSCounterValue == 0)
+        getMillisecondCounter();
+
+    return TimeHelpers::lastMSCounterValue;
 }
 
-void Time::waitForMillisecondCounter (uint32 targetTime) noexcept
+void Time::waitForMillisecondCounter (const uint32 targetTime) noexcept
 {
     for (;;)
     {
-        auto now = getMillisecondCounter();
+        const uint32 now = getMillisecondCounter();
 
         if (now >= targetTime)
             break;
 
-        auto toWait = (int) (targetTime - now);
+        const int toWait = (int) (targetTime - now);
 
         if (toWait > 2)
         {
@@ -325,14 +337,14 @@ String Time::toString (const bool includeDate,
 
     if (includeTime)
     {
-        auto mins = getMinutes();
+        const int mins = getMinutes();
 
         result << (use24HourClock ? getHours() : getHoursInAmPmFormat())
                << (mins < 10 ? ":0" : ":") << mins;
 
         if (includeSeconds)
         {
-            auto secs = getSeconds();
+            const int secs = getSeconds();
             result << (secs < 10 ? ":0" : ":") << secs;
         }
 
@@ -362,7 +374,7 @@ int Time::getMilliseconds() const noexcept  { return TimeHelpers::extendedModulo
 
 int Time::getHoursInAmPmFormat() const noexcept
 {
-    auto hours = getHours();
+    const int hours = getHours();
 
     if (hours == 0)  return 12;
     if (hours <= 12) return hours;
@@ -401,7 +413,7 @@ String Time::getTimeZone() const noexcept
   #else
     tzset();
 
-    auto zonePtr = (const char**) tzname;
+    const char** const zonePtr = (const char**) tzname;
     zone[0] = zonePtr[0];
     zone[1] = zonePtr[1];
   #endif
@@ -475,21 +487,19 @@ static int parseFixedSizeIntAndSkip (String::CharPointerType& t, int numChars, c
 
 Time Time::fromISO8601 (StringRef iso) noexcept
 {
-    auto t = iso.text;
-    auto year = parseFixedSizeIntAndSkip (t, 4, '-');
+    String::CharPointerType t = iso.text;
 
+    const int year = parseFixedSizeIntAndSkip (t, 4, '-');
     if (year < 0)
-        return {};
+        return Time();
 
-    auto month = parseFixedSizeIntAndSkip (t, 2, '-');
-
+    const int month = parseFixedSizeIntAndSkip (t, 2, '-');
     if (month < 0)
-        return {};
+        return Time();
 
-    auto day = parseFixedSizeIntAndSkip (t, 2, 0);
-
+    const int day = parseFixedSizeIntAndSkip (t, 2, 0);
     if (day < 0)
-        return {};
+        return Time();
 
     int hours = 0, minutes = 0, milliseconds = 0;
 
@@ -497,52 +507,34 @@ Time Time::fromISO8601 (StringRef iso) noexcept
     {
         ++t;
         hours = parseFixedSizeIntAndSkip (t, 2, ':');
-
         if (hours < 0)
-            return {};
+            return Time();
 
         minutes = parseFixedSizeIntAndSkip (t, 2, ':');
-
         if (minutes < 0)
-            return {};
+            return Time();
 
-        auto seconds = parseFixedSizeIntAndSkip (t, 2, 0);
-
-        if (seconds < 0)
-             return {};
-
-        if (*t == '.')
-        {
-            ++t;
-            milliseconds = parseFixedSizeIntAndSkip (t, 3, 0);
-
-            if (milliseconds < 0)
-                return {};
-        }
-
-        milliseconds += 1000 * seconds;
+        milliseconds = (int) (1000.0 * CharacterFunctions::readDoubleValue (t));
     }
 
-    auto nextChar = t.getAndAdvance();
+    const juce_wchar nextChar = t.getAndAdvance();
 
     if (nextChar == '-' || nextChar == '+')
     {
-        auto offsetHours = parseFixedSizeIntAndSkip (t, 2, ':');
-
+        const int offsetHours = parseFixedSizeIntAndSkip (t, 2, ':');
         if (offsetHours < 0)
-            return {};
+            return Time();
 
-        auto offsetMinutes = parseFixedSizeIntAndSkip (t, 2, 0);
-
+        const int offsetMinutes = parseFixedSizeIntAndSkip (t, 2, 0);
         if (offsetMinutes < 0)
-            return {};
+            return Time();
 
-        auto offsetMs = (offsetHours * 60 + offsetMinutes) * 60 * 1000;
+        const int offsetMs = (offsetHours * 60 + offsetMinutes) * 60 * 1000;
         milliseconds += nextChar == '-' ? offsetMs : -offsetMs; // NB: this seems backwards but is correct!
     }
     else if (nextChar != 0 && nextChar != 'Z')
     {
-        return {};
+        return Time();
     }
 
     return Time (year, month - 1, day, hours, minutes, 0, milliseconds, false);
@@ -632,7 +624,7 @@ Time Time::getCompilationDate()
 class TimeTests  : public UnitTest
 {
 public:
-    TimeTests() : UnitTest ("Time", "Time") {}
+    TimeTests() : UnitTest ("Time") {}
 
     void runTest() override
     {
@@ -683,5 +675,3 @@ public:
 static TimeTests timeTests;
 
 #endif
-
-} // namespace juce

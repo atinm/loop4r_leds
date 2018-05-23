@@ -2,31 +2,27 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of either:
+   a) the GPL v2 (or any later version)
+   b) the Affero GPL v3
 
-   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
-   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
-   27th April 2017).
+   Details of these licenses can be found at: www.gnu.org/licenses
 
-   End User License Agreement: www.juce.com/juce-5-licence
-   Privacy Policy: www.juce.com/juce-5-privacy-policy
+   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-   Or: You may also use this code under the terms of the GPL v3 (see
-   www.gnu.org/licenses).
+   ------------------------------------------------------------------------------
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   To release a closed-source product which uses JUCE, commercial licenses are
+   available: visit www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
-
+//==============================================================================
 OSCMessage::OSCMessage (const OSCAddressPattern& ap) noexcept  : addressPattern (ap)
 {
 }
@@ -53,12 +49,7 @@ bool OSCMessage::isEmpty() const noexcept
     return arguments.isEmpty();
 }
 
-OSCArgument& OSCMessage::operator[] (const int i) noexcept
-{
-    return arguments.getReference (i);
-}
-
-const OSCArgument& OSCMessage::operator[] (const int i) const noexcept
+OSCArgument& OSCMessage::operator[] (const int i) const noexcept
 {
     return arguments.getReference (i);
 }
@@ -92,7 +83,7 @@ void OSCMessage::addArgument (OSCArgument arg)      { arguments.add (arg); }
 class OSCMessageTests  : public UnitTest
 {
 public:
-    OSCMessageTests() : UnitTest ("OSCMessage class", "OSC") {}
+    OSCMessageTests() : UnitTest ("OSCMessage class") {}
 
     void runTest()
     {
@@ -152,6 +143,7 @@ public:
         }
 
 
+       #if JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES && JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
         beginTest ("Initialisation with argument list (C++11 only)");
         {
             int testInt = 42;
@@ -196,11 +188,10 @@ public:
                 expectEquals (msg[4].getInt32(), testInt);
             }
         }
+       #endif
     }
 };
 
 static OSCMessageTests OSCMessageUnitTests;
 
 #endif // JUCE_UNIT_TESTS
-
-} // namespace juce

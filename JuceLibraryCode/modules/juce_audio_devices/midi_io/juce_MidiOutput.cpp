@@ -2,30 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
-
 struct MidiOutput::PendingMessage
 {
-    PendingMessage (const void* data, int len, double timeStamp)
+    PendingMessage (const void* const data, const int len, const double timeStamp)
         : message (data, len, timeStamp)
     {}
 
@@ -33,8 +38,11 @@ struct MidiOutput::PendingMessage
     PendingMessage* next;
 };
 
-MidiOutput::MidiOutput (const String& deviceName)
-    : Thread ("midi out"), name (deviceName)
+MidiOutput::MidiOutput(const String& midiName)
+    : Thread ("midi out"),
+      internal (nullptr),
+      firstMessage (nullptr),
+      name (midiName)
 {
 }
 
@@ -49,7 +57,7 @@ void MidiOutput::sendBlockOfMessagesNow (const MidiBuffer& buffer)
 }
 
 void MidiOutput::sendBlockOfMessages (const MidiBuffer& buffer,
-                                      double millisecondCounterToStartAt,
+                                      const double millisecondCounterToStartAt,
                                       double samplesPerSecondForBuffer)
 {
     // You've got to call startBackgroundThread() for this to actually work..
@@ -58,15 +66,18 @@ void MidiOutput::sendBlockOfMessages (const MidiBuffer& buffer,
     // this needs to be a value in the future - RTFM for this method!
     jassert (millisecondCounterToStartAt > 0);
 
-    auto timeScaleFactor = 1000.0 / samplesPerSecondForBuffer;
+    const double timeScaleFactor = 1000.0 / samplesPerSecondForBuffer;
+
+    MidiBuffer::Iterator i (buffer);
 
     const uint8* data;
     int len, time;
 
-    for (MidiBuffer::Iterator i (buffer); i.getNextEvent (data, len, time);)
+    while (i.getNextEvent (data, len, time))
     {
-        auto eventTime = millisecondCounterToStartAt + timeScaleFactor * time;
-        auto* m = new PendingMessage (data, len, eventTime);
+        const double eventTime = millisecondCounterToStartAt + timeScaleFactor * time;
+
+        PendingMessage* const m = new PendingMessage (data, len, eventTime);
 
         const ScopedLock sl (lock);
 
@@ -77,7 +88,7 @@ void MidiOutput::sendBlockOfMessages (const MidiBuffer& buffer,
         }
         else
         {
-            auto* mm = firstMessage;
+            PendingMessage* mm = firstMessage;
 
             while (mm->next != nullptr && mm->next->message.getTimeStamp() <= eventTime)
                 mm = mm->next;
@@ -96,7 +107,7 @@ void MidiOutput::clearAllPendingMessages()
 
     while (firstMessage != nullptr)
     {
-        auto* m = firstMessage;
+        PendingMessage* const m = firstMessage;
         firstMessage = firstMessage->next;
         delete m;
     }
@@ -144,7 +155,7 @@ void MidiOutput::run()
 
         if (message != nullptr)
         {
-            std::unique_ptr<PendingMessage> messageDeleter (message);
+            const ScopedPointer<PendingMessage> messageDeleter (message);
 
             if (eventTime > now)
             {
@@ -166,5 +177,3 @@ void MidiOutput::run()
 
     clearAllPendingMessages();
 }
-
-} // namespace juce

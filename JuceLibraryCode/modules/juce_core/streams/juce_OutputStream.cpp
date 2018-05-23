@@ -2,26 +2,31 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
-
-namespace juce
-{
 
 #if JUCE_DEBUG
 
@@ -63,7 +68,7 @@ OutputStream::~OutputStream()
 }
 
 //==============================================================================
-bool OutputStream::writeBool (bool b)
+bool OutputStream::writeBool (const bool b)
 {
     return writeByte (b ? (char) 1
                         : (char) 0);
@@ -85,32 +90,32 @@ bool OutputStream::writeRepeatedByte (uint8 byte, size_t numTimesToRepeat)
 
 bool OutputStream::writeShort (short value)
 {
-    auto v = ByteOrder::swapIfBigEndian ((uint16) value);
+    const unsigned short v = ByteOrder::swapIfBigEndian ((unsigned short) value);
     return write (&v, 2);
 }
 
 bool OutputStream::writeShortBigEndian (short value)
 {
-    auto v = ByteOrder::swapIfLittleEndian ((uint16) value);
+    const unsigned short v = ByteOrder::swapIfLittleEndian ((unsigned short) value);
     return write (&v, 2);
 }
 
 bool OutputStream::writeInt (int value)
 {
-    auto v = ByteOrder::swapIfBigEndian ((uint32) value);
+    const unsigned int v = ByteOrder::swapIfBigEndian ((unsigned int) value);
     return write (&v, 4);
 }
 
 bool OutputStream::writeIntBigEndian (int value)
 {
-    auto v = ByteOrder::swapIfLittleEndian ((uint32) value);
+    const unsigned int v = ByteOrder::swapIfLittleEndian ((unsigned int) value);
     return write (&v, 4);
 }
 
 bool OutputStream::writeCompressedInt (int value)
 {
-    auto un = (value < 0) ? (unsigned int) -value
-                          : (unsigned int) value;
+    unsigned int un = (value < 0) ? (unsigned int) -value
+                                  : (unsigned int) value;
 
     uint8 data[5];
     int num = 0;
@@ -131,13 +136,13 @@ bool OutputStream::writeCompressedInt (int value)
 
 bool OutputStream::writeInt64 (int64 value)
 {
-    auto v = ByteOrder::swapIfBigEndian ((uint64) value);
+    const uint64 v = ByteOrder::swapIfBigEndian ((uint64) value);
     return write (&v, 8);
 }
 
 bool OutputStream::writeInt64BigEndian (int64 value)
 {
-    auto v = ByteOrder::swapIfLittleEndian ((uint64) value);
+    const uint64 v = ByteOrder::swapIfLittleEndian ((uint64) value);
     return write (&v, 8);
 }
 
@@ -171,53 +176,40 @@ bool OutputStream::writeDoubleBigEndian (double value)
 
 bool OutputStream::writeString (const String& text)
 {
-    auto numBytes = text.getNumBytesAsUTF8() + 1;
-
    #if (JUCE_STRING_UTF_TYPE == 8)
-    return write (text.toRawUTF8(), numBytes);
+    return write (text.toRawUTF8(), text.getNumBytesAsUTF8() + 1);
    #else
     // (This avoids using toUTF8() to prevent the memory bloat that it would leave behind
     // if lots of large, persistent strings were to be written to streams).
+    const size_t numBytes = text.getNumBytesAsUTF8() + 1;
     HeapBlock<char> temp (numBytes);
     text.copyToUTF8 (temp, numBytes);
     return write (temp, numBytes);
    #endif
 }
 
-bool OutputStream::writeText (const String& text, bool asUTF16, bool writeUTF16ByteOrderMark, const char* lf)
+bool OutputStream::writeText (const String& text, const bool asUTF16,
+                              const bool writeUTF16ByteOrderMark)
 {
-    bool replaceLineFeedWithUnix    = lf != nullptr && lf[0] == '\n' && lf[1] == 0;
-    bool replaceLineFeedWithWindows = lf != nullptr && lf[0] == '\r' && lf[1] == '\n' && lf[2] == 0;
-
-    // The line-feed passed in must be either nullptr, or "\n" or "\r\n"
-    jassert (lf == nullptr || replaceLineFeedWithWindows || replaceLineFeedWithUnix);
-
     if (asUTF16)
     {
         if (writeUTF16ByteOrderMark)
             write ("\x0ff\x0fe", 2);
 
-        auto src = text.getCharPointer();
+        String::CharPointerType src (text.getCharPointer());
         bool lastCharWasReturn = false;
 
         for (;;)
         {
-            auto c = src.getAndAdvance();
+            const juce_wchar c = src.getAndAdvance();
 
             if (c == 0)
                 break;
 
-            if (replaceLineFeedWithWindows)
-            {
-                if (c == '\n' && ! lastCharWasReturn)
-                    writeShort ((short) '\r');
+            if (c == '\n' && ! lastCharWasReturn)
+                writeShort ((short) '\r');
 
-                lastCharWasReturn = (c == L'\r');
-            }
-            else if (replaceLineFeedWithUnix && c == '\r')
-            {
-                continue;
-            }
+            lastCharWasReturn = (c == L'\r');
 
             if (! writeShort ((short) c))
                 return false;
@@ -225,57 +217,37 @@ bool OutputStream::writeText (const String& text, bool asUTF16, bool writeUTF16B
     }
     else
     {
-        const char* src = text.toRawUTF8();
+        const char* src = text.toUTF8();
+        const char* t = src;
 
-        if (replaceLineFeedWithWindows)
+        for (;;)
         {
-            for (auto t = src;;)
+            if (*t == '\n')
             {
-                if (*t == '\n')
-                {
-                    if (t > src)
-                        if (! write (src, (size_t) (t - src)))
-                            return false;
-
-                    if (! write ("\r\n", 2))
+                if (t > src)
+                    if (! write (src, (size_t) (t - src)))
                         return false;
 
-                    src = t + 1;
-                }
-                else if (*t == '\r')
-                {
-                    if (t[1] == '\n')
-                        ++t;
-                }
-                else if (*t == 0)
-                {
-                    if (t > src)
-                        if (! write (src, (size_t) (t - src)))
-                            return false;
+                if (! write ("\r\n", 2))
+                    return false;
 
-                    break;
-                }
-
-                ++t;
+                src = t + 1;
             }
-        }
-        else if (replaceLineFeedWithUnix)
-        {
-            for (;;)
+            else if (*t == '\r')
             {
-                auto c = *src++;
-
-                if (c == 0)
-                    break;
-
-                if (c != '\r')
-                    if (! writeByte (c))
-                        return false;
+                if (t[1] == '\n')
+                    ++t;
             }
-        }
-        else
-        {
-            return write (src, text.getNumBytesAsUTF8());
+            else if (*t == 0)
+            {
+                if (t > src)
+                    if (! write (src, (size_t) (t - src)))
+                        return false;
+
+                break;
+            }
+
+            ++t;
         }
     }
 
@@ -291,8 +263,8 @@ int64 OutputStream::writeFromInputStream (InputStream& source, int64 numBytesToW
 
     while (numBytesToWrite > 0)
     {
-        char buffer[8192];
-        auto num = source.read (buffer, (int) jmin (numBytesToWrite, (int64) sizeof (buffer)));
+        char buffer [8192];
+        const int num = source.read (buffer, (int) jmin (numBytesToWrite, (int64) sizeof (buffer)));
 
         if (num <= 0)
             break;
@@ -307,16 +279,16 @@ int64 OutputStream::writeFromInputStream (InputStream& source, int64 numBytesToW
 }
 
 //==============================================================================
-void OutputStream::setNewLineString (const String& newLineStringToUse)
+void OutputStream::setNewLineString (const String& newLineString_)
 {
-    newLineString = newLineStringToUse;
+    newLineString = newLineString_;
 }
 
 //==============================================================================
 template <typename IntegerType>
 static void writeIntToStream (OutputStream& stream, IntegerType number)
 {
-    char buffer[NumberToStringConverters::charsNeededForInt];
+    char buffer [NumberToStringConverters::charsNeededForInt];
     char* end = buffer + numElementsInArray (buffer);
     const char* start = NumberToStringConverters::numberToString (end, number);
     stream.write (start, (size_t) (end - start - 1));
@@ -379,5 +351,3 @@ JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const New
 {
     return stream << stream.getNewLineString();
 }
-
-} // namespace juce

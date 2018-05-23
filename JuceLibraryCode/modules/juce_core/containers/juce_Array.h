@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_ARRAY_H_INCLUDED
+#define JUCE_ARRAY_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -46,8 +55,6 @@ namespace juce
     TypeOfCriticalSectionToUse parameter, instead of the default DummyCriticalSection.
 
     @see OwnedArray, ReferenceCountedArray, StringArray, CriticalSection
-
-    @tags{Core}
 */
 template <typename ElementType,
           typename TypeOfCriticalSectionToUse = DummyCriticalSection,
@@ -55,12 +62,12 @@ template <typename ElementType,
 class Array
 {
 private:
-    using ParameterType = typename TypeHelpers::ParameterType<ElementType>::type;
+    typedef PARAMETER_TYPE (ElementType) ParameterType;
 
 public:
     //==============================================================================
     /** Creates an empty array. */
-    Array() noexcept
+    Array() noexcept   : numUsed (0)
     {
     }
 
@@ -77,24 +84,28 @@ public:
             new (data.elements + i) ElementType (other.data.elements[i]);
     }
 
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     Array (Array<ElementType, TypeOfCriticalSectionToUse>&& other) noexcept
         : data (static_cast<ArrayAllocationBase<ElementType, TypeOfCriticalSectionToUse>&&> (other.data)),
           numUsed (other.numUsed)
     {
         other.numUsed = 0;
     }
+   #endif
 
-    /** Initalises from a null-terminated raw array of values.
+    /** Initalises from a null-terminated C array of values.
+
         @param values   the array to copy from
     */
     template <typename TypeToCreateFrom>
-    explicit Array (const TypeToCreateFrom* values)
+    explicit Array (const TypeToCreateFrom* values)  : numUsed (0)
     {
         while (*values != TypeToCreateFrom())
             add (*values++);
     }
 
-    /** Initalises from a raw array of values.
+    /** Initalises from a C array of values.
+
         @param values       the array to copy from
         @param numValues    the number of values in the array
     */
@@ -107,39 +118,13 @@ public:
             new (data.elements + i) ElementType (values[i]);
     }
 
-    /** Initalises an Array of size 1 containing a single element. */
-    Array (const ElementType& singleElementToAdd)
-    {
-        add (singleElementToAdd);
-    }
-
-    /** Initalises an Array of size 1 containing a single element. */
-    Array (ElementType&& singleElementToAdd)
-    {
-        add (static_cast<ElementType&&> (singleElementToAdd));
-    }
-
-    /** Initalises an Array from a list of items. */
-    template <typename... OtherElements>
-    Array (const ElementType& firstNewElement, OtherElements... otherElements)
-    {
-        data.setAllocatedSize (1 + (int) sizeof... (otherElements));
-        addAssumingCapacityIsReady (firstNewElement, otherElements...);
-    }
-
-    /** Initalises an Array from a list of items. */
-    template <typename... OtherElements>
-    Array (ElementType&& firstNewElement, OtherElements... otherElements)
-    {
-        data.setAllocatedSize (1 + (int) sizeof... (otherElements));
-        addAssumingCapacityIsReady (static_cast<ElementType&&> (firstNewElement), otherElements...);
-    }
-
+   #if JUCE_COMPILER_SUPPORTS_INITIALIZER_LISTS
     template <typename TypeToCreateFrom>
-    Array (const std::initializer_list<TypeToCreateFrom>& items)
+    Array (const std::initializer_list<TypeToCreateFrom>& items)  : numUsed (0)
     {
         addArray (items);
     }
+   #endif
 
     /** Destructor. */
     ~Array()
@@ -154,13 +139,14 @@ public:
     {
         if (this != &other)
         {
-            auto otherCopy (other);
+            Array<ElementType, TypeOfCriticalSectionToUse> otherCopy (other);
             swapWith (otherCopy);
         }
 
         return *this;
     }
 
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     Array& operator= (Array&& other) noexcept
     {
         const ScopedLockType lock (getLock());
@@ -170,6 +156,7 @@ public:
         other.numUsed = 0;
         return *this;
     }
+   #endif
 
     //==============================================================================
     /** Compares this array to another one.
@@ -187,7 +174,7 @@ public:
             return false;
 
         for (int i = numUsed; --i >= 0;)
-            if (! (data.elements[i] == other.data.elements[i]))
+            if (! (data.elements [i] == other.data.elements [i]))
                 return false;
 
         return true;
@@ -230,15 +217,6 @@ public:
         numUsed = 0;
     }
 
-    /** Fills the Array with the provided value. */
-    void fill (const ParameterType& newValue) noexcept
-    {
-        const ScopedLockType lock (getLock());
-
-        for (auto& e : *this)
-            e = newValue;
-    }
-
     //==============================================================================
     /** Returns the current number of elements in the array. */
     inline int size() const noexcept
@@ -249,7 +227,7 @@ public:
     /** Returns true if the array is empty, false otherwise. */
     inline bool isEmpty() const noexcept
     {
-        return numUsed == 0;
+        return size() == 0;
     }
 
     /** Returns one of the elements in the array.
@@ -269,7 +247,7 @@ public:
         if (isPositiveAndBelow (index, numUsed))
         {
             jassert (data.elements != nullptr);
-            return data.elements[index];
+            return data.elements [index];
         }
 
         return ElementType();
@@ -288,7 +266,7 @@ public:
     {
         const ScopedLockType lock (getLock());
         jassert (isPositiveAndBelow (index, numUsed) && data.elements != nullptr);
-        return data.elements[index];
+        return data.elements [index];
     }
 
     /** Returns a direct reference to one of the elements in the array, without checking the index passed in.
@@ -304,10 +282,11 @@ public:
     {
         const ScopedLockType lock (getLock());
         jassert (isPositiveAndBelow (index, numUsed) && data.elements != nullptr);
-        return data.elements[index];
+        return data.elements [index];
     }
 
     /** Returns the first element in the array, or a default value if the array is empty.
+
         @see operator[], getUnchecked, getLast
     */
     inline ElementType getFirst() const
@@ -383,12 +362,12 @@ public:
     int indexOf (ParameterType elementToLookFor) const
     {
         const ScopedLockType lock (getLock());
-        auto e = data.elements.get();
-        auto endPtr = e + numUsed;
+        const ElementType* e = data.elements.getData();
+        const ElementType* const end_ = e + numUsed;
 
-        for (; e != endPtr; ++e)
+        for (; e != end_; ++e)
             if (elementToLookFor == *e)
-                return static_cast<int> (e - data.elements.get());
+                return static_cast<int> (e - data.elements.getData());
 
         return -1;
     }
@@ -401,10 +380,10 @@ public:
     bool contains (ParameterType elementToLookFor) const
     {
         const ScopedLockType lock (getLock());
-        auto e = data.elements.get();
-        auto endPtr = e + numUsed;
+        const ElementType* e = data.elements.getData();
+        const ElementType* const end_ = e + numUsed;
 
-        for (; e != endPtr; ++e)
+        for (; e != end_; ++e)
             if (elementToLookFor == *e)
                 return true;
 
@@ -413,6 +392,7 @@ public:
 
     //==============================================================================
     /** Appends a new element at the end of the array.
+
         @param newElement       the new object to add to the array
         @see set, insert, addIfNotAlreadyThere, addSorted, addUsingDefaultSort, addArray
     */
@@ -423,7 +403,9 @@ public:
         new (data.elements + numUsed++) ElementType (newElement);
     }
 
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     /** Appends a new element at the end of the array.
+
         @param newElement       the new object to add to the array
         @see set, insert, addIfNotAlreadyThere, addSorted, addUsingDefaultSort, addArray
     */
@@ -433,24 +415,7 @@ public:
         data.ensureAllocatedSize (numUsed + 1);
         new (data.elements + numUsed++) ElementType (static_cast<ElementType&&> (newElement));
     }
-
-    /** Appends multiple new elements at the end of the array. */
-    template <typename... OtherElements>
-    void add (const ElementType& firstNewElement, OtherElements... otherElements)
-    {
-        const ScopedLockType lock (getLock());
-        data.ensureAllocatedSize (numUsed + 1 + (int) sizeof... (otherElements));
-        addAssumingCapacityIsReady (firstNewElement, otherElements...);
-    }
-
-    /** Appends multiple new elements at the end of the array. */
-    template <typename... OtherElements>
-    void add (ElementType&& firstNewElement, OtherElements... otherElements)
-    {
-        const ScopedLockType lock (getLock());
-        data.ensureAllocatedSize (numUsed + 1 + (int) sizeof... (otherElements));
-        addAssumingCapacityIsReady (static_cast<ElementType&&> (firstNewElement), otherElements...);
-    }
+   #endif
 
     /** Inserts a new element into the array at a given position.
 
@@ -472,8 +437,8 @@ public:
 
         if (isPositiveAndBelow (indexToInsertAt, numUsed))
         {
-            auto* insertPos = data.elements + indexToInsertAt;
-            auto numberToMove = numUsed - indexToInsertAt;
+            ElementType* const insertPos = data.elements + indexToInsertAt;
+            const int numberToMove = numUsed - indexToInsertAt;
 
             if (numberToMove > 0)
                 memmove (insertPos + 1, insertPos, ((size_t) numberToMove) * sizeof (ElementType));
@@ -511,7 +476,7 @@ public:
             if (isPositiveAndBelow (indexToInsertAt, numUsed))
             {
                 insertPos = data.elements + indexToInsertAt;
-                auto numberToMove = numUsed - indexToInsertAt;
+                const int numberToMove = numUsed - indexToInsertAt;
                 memmove (insertPos + numberOfTimesToInsertIt, insertPos, ((size_t) numberToMove) * sizeof (ElementType));
             }
             else
@@ -555,7 +520,7 @@ public:
             if (isPositiveAndBelow (indexToInsertAt, numUsed))
             {
                 insertPos += indexToInsertAt;
-                auto numberToMove = numUsed - indexToInsertAt;
+                const int numberToMove = numUsed - indexToInsertAt;
                 memmove (insertPos + numberOfElements, insertPos, (size_t) numberToMove * sizeof (ElementType));
             }
             else
@@ -607,7 +572,7 @@ public:
         if (isPositiveAndBelow (indexToChange, numUsed))
         {
             jassert (data.elements != nullptr);
-            data.elements[indexToChange] = newValue;
+            data.elements [indexToChange] = newValue;
         }
         else if (indexToChange >= 0)
         {
@@ -629,7 +594,7 @@ public:
     {
         const ScopedLockType lock (getLock());
         jassert (isPositiveAndBelow (indexToChange, numUsed));
-        data.elements[indexToChange] = newValue;
+        data.elements [indexToChange] = newValue;
     }
 
     /** Adds elements from an array to the end of this array.
@@ -656,6 +621,7 @@ public:
         }
     }
 
+   #if JUCE_COMPILER_SUPPORTS_INITIALIZER_LISTS
     template <typename TypeToCreateFrom>
     void addArray (const std::initializer_list<TypeToCreateFrom>& items)
     {
@@ -668,6 +634,7 @@ public:
             ++numUsed;
         }
     }
+   #endif
 
     /** Adds elements from a null-terminated array of pointers to the end of this array.
 
@@ -679,8 +646,7 @@ public:
     void addNullTerminatedArray (const Type* const* elementsToAdd)
     {
         int num = 0;
-
-        for (auto e = elementsToAdd; *e != nullptr; ++e)
+        for (const Type* const* e = elementsToAdd; *e != nullptr; ++e)
             ++num;
 
         addArray (elementsToAdd, num);
@@ -728,10 +694,8 @@ public:
             if (numElementsToAdd < 0 || startIndex + numElementsToAdd > arrayToAddFrom.size())
                 numElementsToAdd = arrayToAddFrom.size() - startIndex;
 
-            data.ensureAllocatedSize (numUsed + numElementsToAdd);
-
             while (--numElementsToAdd >= 0)
-                addAssumingCapacityIsReady (arrayToAddFrom.getUnchecked (startIndex++));
+                add (arrayToAddFrom.getUnchecked (startIndex++));
         }
     }
 
@@ -745,8 +709,8 @@ public:
     void resize (const int targetNumItems)
     {
         jassert (targetNumItems >= 0);
-        auto numToAdd = targetNumItems - numUsed;
 
+        const int numToAdd = targetNumItems - numUsed;
         if (numToAdd > 0)
             insertMultiple (numUsed, ElementType(), numToAdd);
         else if (numToAdd < 0)
@@ -769,7 +733,7 @@ public:
     int addSorted (ElementComparator& comparator, ParameterType newElement)
     {
         const ScopedLockType lock (getLock());
-        auto index = findInsertIndexInSortedArray (comparator, data.elements.get(), newElement, 0, numUsed);
+        const int index = findInsertIndexInSortedArray (comparator, data.elements.getData(), newElement, 0, numUsed);
         insert (index, newElement);
         return index;
     }
@@ -814,15 +778,14 @@ public:
             if (s >= e)
                 return -1;
 
-            if (comparator.compareElements (elementToLookFor, data.elements[s]) == 0)
+            if (comparator.compareElements (elementToLookFor, data.elements [s]) == 0)
                 return s;
 
-            auto halfway = (s + e) / 2;
-
+            const int halfway = (s + e) / 2;
             if (halfway == s)
                 return -1;
 
-            if (comparator.compareElements (elementToLookFor, data.elements[halfway]) >= 0)
+            if (comparator.compareElements (elementToLookFor, data.elements [halfway]) >= 0)
                 s = halfway;
             else
                 e = halfway;
@@ -860,7 +823,7 @@ public:
         @returns                the element that has been removed
         @see removeFirstMatchingValue, removeAllInstancesOf, removeRange
     */
-    ElementType removeAndReturn (int indexToRemove)
+    ElementType removeAndReturn (const int indexToRemove)
     {
         const ScopedLockType lock (getLock());
 
@@ -872,7 +835,7 @@ public:
             return removed;
         }
 
-        return {};
+        return ElementType();
     }
 
     /** Removes an element from the array.
@@ -891,7 +854,7 @@ public:
         const ScopedLockType lock (getLock());
 
         jassert (data.elements != nullptr);
-        auto indexToRemove = (int) (elementToRemove - data.elements);
+        const int indexToRemove = int (elementToRemove - data.elements);
 
         if (! isPositiveAndBelow (indexToRemove, numUsed))
         {
@@ -913,7 +876,7 @@ public:
     void removeFirstMatchingValue (ParameterType valueToRemove)
     {
         const ScopedLockType lock (getLock());
-        auto* e = data.elements.get();
+        ElementType* const e = data.elements;
 
         for (int i = 0; i < numUsed; ++i)
         {
@@ -970,7 +933,7 @@ public:
 
         for (int i = numUsed; --i >= 0;)
         {
-            if (predicate (data.elements[i]))
+            if (predicate (data.elements[i]) == true)
             {
                 removeInternal (i);
                 ++numRemoved;
@@ -995,19 +958,18 @@ public:
     void removeRange (int startIndex, int numberToRemove)
     {
         const ScopedLockType lock (getLock());
-        auto endIndex = jlimit (0, numUsed, startIndex + numberToRemove);
+        const int endIndex = jlimit (0, numUsed, startIndex + numberToRemove);
         startIndex = jlimit (0, numUsed, startIndex);
 
         if (endIndex > startIndex)
         {
-            auto* e = data.elements + startIndex;
-            numberToRemove = endIndex - startIndex;
+            ElementType* const e = data.elements + startIndex;
 
+            numberToRemove = endIndex - startIndex;
             for (int i = 0; i < numberToRemove; ++i)
                 e[i].~ElementType();
 
-            auto numToShift = numUsed - endIndex;
-
+            const int numToShift = numUsed - endIndex;
             if (numToShift > 0)
                 memmove (e, e + numberToRemove, ((size_t) numToShift) * sizeof (ElementType));
 
@@ -1029,7 +991,7 @@ public:
             howManyToRemove = numUsed;
 
         for (int i = 1; i <= howManyToRemove; ++i)
-            data.elements[numUsed - i].~ElementType();
+            data.elements [numUsed - i].~ElementType();
 
         numUsed -= howManyToRemove;
         minimiseStorageAfterRemoval();
@@ -1055,7 +1017,7 @@ public:
             if (otherArray.size() > 0)
             {
                 for (int i = numUsed; --i >= 0;)
-                    if (otherArray.contains (data.elements[i]))
+                    if (otherArray.contains (data.elements [i]))
                         removeInternal (i);
             }
         }
@@ -1083,7 +1045,7 @@ public:
             else
             {
                 for (int i = numUsed; --i >= 0;)
-                    if (! otherArray.contains (data.elements[i]))
+                    if (! otherArray.contains (data.elements [i]))
                         removeInternal (i);
             }
         }
@@ -1097,15 +1059,16 @@ public:
         @param index1   index of one of the elements to swap
         @param index2   index of the other element to swap
     */
-    void swap (int index1, int index2)
+    void swap (const int index1,
+               const int index2)
     {
         const ScopedLockType lock (getLock());
 
         if (isPositiveAndBelow (index1, numUsed)
              && isPositiveAndBelow (index2, numUsed))
         {
-            std::swap (data.elements[index1],
-                       data.elements[index2]);
+            std::swap (data.elements [index1],
+                       data.elements [index2]);
         }
     }
 
@@ -1123,7 +1086,7 @@ public:
                                 is less than zero, the value will be moved to the end
                                 of the array
     */
-    void move (int currentIndex, int newIndex) noexcept
+    void move (const int currentIndex, int newIndex) noexcept
     {
         if (currentIndex != newIndex)
         {
@@ -1134,7 +1097,7 @@ public:
                 if (! isPositiveAndBelow (newIndex, numUsed))
                     newIndex = numUsed - 1;
 
-                char tempCopy[sizeof (ElementType)];
+                char tempCopy [sizeof (ElementType)];
                 memcpy (tempCopy, data.elements + currentIndex, sizeof (ElementType));
 
                 if (newIndex > currentIndex)
@@ -1224,7 +1187,7 @@ public:
         const ScopedLockType lock (getLock());
         ignoreUnused (comparator); // if you pass in an object with a static compareElements() method, this
                                    // avoids getting warning messages about the parameter being unused
-        sortArray (comparator, data.elements.get(), 0, size() - 1, retainOrderOfEquivalentItems);
+        sortArray (comparator, data.elements.getData(), 0, size() - 1, retainOrderOfEquivalentItems);
     }
 
     //==============================================================================
@@ -1235,7 +1198,7 @@ public:
     inline const TypeOfCriticalSectionToUse& getLock() const noexcept      { return data; }
 
     /** Returns the type of scoped lock to use for locking this array */
-    using ScopedLockType = typename TypeOfCriticalSectionToUse::ScopedLockType;
+    typedef typename TypeOfCriticalSectionToUse::ScopedLockType ScopedLockType;
 
 
     //==============================================================================
@@ -1248,14 +1211,14 @@ public:
 private:
     //==============================================================================
     ArrayAllocationBase <ElementType, TypeOfCriticalSectionToUse> data;
-    int numUsed = 0;
+    int numUsed;
 
     void removeInternal (const int indexToRemove)
     {
         --numUsed;
-        auto* e = data.elements + indexToRemove;
+        ElementType* const e = data.elements + indexToRemove;
         e->~ElementType();
-        auto numberToShift = numUsed - indexToRemove;
+        const int numberToShift = numUsed - indexToRemove;
 
         if (numberToShift > 0)
             memmove (e, e + 1, ((size_t) numberToShift) * sizeof (ElementType));
@@ -1274,23 +1237,7 @@ private:
         if (data.numAllocated > jmax (minimumAllocatedSize, numUsed * 2))
             data.shrinkToNoMoreThan (jmax (numUsed, jmax (minimumAllocatedSize, 64 / (int) sizeof (ElementType))));
     }
-
-    void addAssumingCapacityIsReady (const ElementType& e)  { new (data.elements + numUsed++) ElementType (e); }
-    void addAssumingCapacityIsReady (ElementType&& e)       { new (data.elements + numUsed++) ElementType (static_cast<ElementType&&> (e)); }
-
-    template <typename... OtherElements>
-    void addAssumingCapacityIsReady (const ElementType& firstNewElement, OtherElements... otherElements)
-    {
-        addAssumingCapacityIsReady (firstNewElement);
-        addAssumingCapacityIsReady (otherElements...);
-    }
-
-    template <typename... OtherElements>
-    void addAssumingCapacityIsReady (ElementType&& firstNewElement, OtherElements... otherElements)
-    {
-        addAssumingCapacityIsReady (static_cast<ElementType&&> (firstNewElement));
-        addAssumingCapacityIsReady (otherElements...);
-    }
 };
 
-} // namespace juce
+
+#endif   // JUCE_ARRAY_H_INCLUDED

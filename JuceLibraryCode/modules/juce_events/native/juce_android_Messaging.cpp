@@ -2,124 +2,37 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+void MessageManager::doPlatformSpecificInitialisation() {}
+void MessageManager::doPlatformSpecificShutdown() {}
 
 //==============================================================================
-namespace Android
-{
-    class Runnable  : public juce::AndroidInterfaceImplementer
-    {
-    public:
-        virtual void run() = 0;
-
-    private:
-        jobject invoke (jobject proxy, jobject method, jobjectArray args) override
-        {
-            auto* env = getEnv();
-            auto methodName = juce::juceString ((jstring) env->CallObjectMethod (method, JavaMethod.getName));
-
-            if (methodName == "run")
-            {
-                run();
-                return nullptr;
-            }
-
-            // invoke base class
-            return AndroidInterfaceImplementer::invoke (proxy, method, args);
-        }
-    };
-
-    struct Handler
-    {
-        Handler() : nativeHandler (getEnv()->NewObject (AndroidHandler, AndroidHandler.constructor)) {}
-        ~Handler() { clearSingletonInstance(); }
-
-        JUCE_DECLARE_SINGLETON (Handler, false)
-
-        bool post (jobject runnable)
-        {
-            return (getEnv()->CallBooleanMethod (nativeHandler.get(), AndroidHandler.post, runnable) != 0);
-        }
-
-        GlobalRef nativeHandler;
-    };
-
-    JUCE_IMPLEMENT_SINGLETON (Handler)
-}
-
-//==============================================================================
-struct AndroidMessageQueue     : private Android::Runnable
-{
-    JUCE_DECLARE_SINGLETON_SINGLETHREADED (AndroidMessageQueue, true)
-
-    AndroidMessageQueue()
-        : self (CreateJavaInterface (this, "java/lang/Runnable").get())
-    {
-    }
-
-    ~AndroidMessageQueue()
-    {
-        jassert (MessageManager::getInstance()->isThisTheMessageThread());
-        clearSingletonInstance();
-    }
-
-    bool post (MessageManager::MessageBase::Ptr&& message)
-    {
-        queue.add (static_cast<MessageManager::MessageBase::Ptr&& > (message));
-
-        // this will call us on the message thread
-        return handler.post (self.get());
-    }
-
-private:
-
-    void run() override
-    {
-        while (true)
-        {
-            MessageManager::MessageBase::Ptr message (queue.removeAndReturn (0));
-
-            if (message == nullptr)
-                break;
-
-            message->messageCallback();
-        }
-    }
-
-    // the this pointer to this class in Java land
-    GlobalRef self;
-
-    ReferenceCountedArray<MessageManager::MessageBase, CriticalSection> queue;
-    Android::Handler handler;
-};
-
-JUCE_IMPLEMENT_SINGLETON (AndroidMessageQueue)
-
-//==============================================================================
-void MessageManager::doPlatformSpecificInitialisation() { AndroidMessageQueue::getInstance(); }
-void MessageManager::doPlatformSpecificShutdown()       { AndroidMessageQueue::deleteInstance(); }
-
-//==============================================================================
-bool MessageManager::dispatchNextMessageOnSystemQueue (const bool)
+bool MessageManager::dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
 {
     Logger::outputDebugString ("*** Modal loops are not possible in Android!! Exiting...");
     exit (1);
@@ -127,10 +40,27 @@ bool MessageManager::dispatchNextMessageOnSystemQueue (const bool)
     return true;
 }
 
+//==============================================================================
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {
-    return AndroidMessageQueue::getInstance()->post (message);
+    message->incReferenceCount();
+    android.activity.callVoidMethod (JuceAppActivity.postMessage, (jlong) (pointer_sized_uint) message);
+    return true;
 }
+
+JUCE_JNI_CALLBACK (JUCE_ANDROID_ACTIVITY_CLASSNAME, deliverMessage, void, (JNIEnv* env, jobject activity, jlong value))
+{
+    setEnv (env);
+
+    JUCE_TRY
+    {
+        MessageManager::MessageBase* const message = (MessageManager::MessageBase*) (pointer_sized_uint) value;
+        message->messageCallback();
+        message->decReferenceCount();
+    }
+    JUCE_CATCH_EXCEPTION
+}
+
 //==============================================================================
 void MessageManager::broadcastMessage (const String&)
 {
@@ -148,24 +78,10 @@ void MessageManager::stopDispatchLoop()
 
         void messageCallback() override
         {
-            auto* env = getEnv();
-
-            jmethodID quitMethod = env->GetMethodID (JuceAppActivity, "finishAndRemoveTask", "()V");
-
-            if (quitMethod != 0)
-            {
-                env->CallVoidMethod (android.activity, quitMethod);
-                return;
-            }
-
-            quitMethod = env->GetMethodID (JuceAppActivity, "finish", "()V");
-            jassert (quitMethod != 0);
-            env->CallVoidMethod (android.activity, quitMethod);
+            android.activity.callVoidMethod (JuceAppActivity.finish);
         }
     };
 
     (new QuitCallback())->post();
     quitMessagePosted = true;
 }
-
-} // namespace juce

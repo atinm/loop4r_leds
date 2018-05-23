@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_BIGINTEGER_H_INCLUDED
+#define JUCE_BIGINTEGER_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -32,8 +41,6 @@ namespace juce
 
     Negative values are possible, but the value isn't stored as 2s-complement, so
     be careful if you use negative values and look at the values of individual bits.
-
-    @tags{Core}
 */
 class JUCE_API  BigInteger
 {
@@ -62,11 +69,10 @@ public:
     /** Creates a copy of another BigInteger. */
     BigInteger (const BigInteger&);
 
-    /** Move constructor */
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     BigInteger (BigInteger&&) noexcept;
-
-    /** Move assignment operator */
     BigInteger& operator= (BigInteger&&) noexcept;
+   #endif
 
     /** Destructor. */
     ~BigInteger();
@@ -325,8 +331,8 @@ private:
     HeapBlock<uint32> heapAllocation;
     uint32 preallocated[numPreallocatedInts];
     size_t allocatedSize;
-    int highestBit = -1;
-    bool negative = false;
+    int highestBit;
+    bool negative;
 
     uint32* getValues() const noexcept;
     uint32* ensureSize (size_t);
@@ -339,4 +345,11 @@ private:
 /** Writes a BigInteger to an OutputStream as a UTF8 decimal string. */
 OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const BigInteger& value);
 
-} // namespace juce
+//==============================================================================
+#ifndef DOXYGEN
+ // For backwards compatibility, BitArray is defined as an alias for BigInteger.
+ typedef BigInteger BitArray;
+#endif
+
+
+#endif   // JUCE_BIGINTEGER_H_INCLUDED

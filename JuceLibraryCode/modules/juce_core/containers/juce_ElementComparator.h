@@ -2,34 +2,40 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_ELEMENTCOMPARATOR_H_INCLUDED
+#define JUCE_ELEMENTCOMPARATOR_H_INCLUDED
 
 #ifndef DOXYGEN
 
 /** This is an internal helper class which converts a juce ElementComparator style
     class (using a "compareElements" method) into a class that's compatible with
     std::sort (i.e. using an operator() to compare the elements)
-
-    @tags{Core}
 */
 template <typename ElementComparator>
 struct SortFunctionConverter
@@ -41,7 +47,7 @@ struct SortFunctionConverter
 
 private:
     ElementComparator& comparator;
-    SortFunctionConverter& operator= (const SortFunctionConverter&) = delete;
+    SortFunctionConverter& operator= (const SortFunctionConverter&) JUCE_DELETED_FUNCTION;
 };
 
 #endif
@@ -82,17 +88,12 @@ static void sortArray (ElementComparator& comparator,
                        int lastElement,
                        const bool retainOrderOfEquivalentItems)
 {
-    jassert (firstElement >= 0);
+    SortFunctionConverter<ElementComparator> converter (comparator);
 
-    if (lastElement > firstElement)
-    {
-        SortFunctionConverter<ElementComparator> converter (comparator);
-
-        if (retainOrderOfEquivalentItems)
-            std::stable_sort (array + firstElement, array + lastElement + 1, converter);
-        else
-            std::sort        (array + firstElement, array + lastElement + 1, converter);
-    }
+    if (retainOrderOfEquivalentItems)
+        std::stable_sort (array + firstElement, array + lastElement + 1, converter);
+    else
+        std::sort        (array + firstElement, array + lastElement + 1, converter);
 }
 
 
@@ -172,20 +173,18 @@ static int findInsertIndexInSortedArray (ElementComparator& comparator,
     This will work for primitive types and objects that implement operator<().
 
     Example: @code
-    Array<int> myArray;
+    Array <int> myArray;
     DefaultElementComparator<int> sorter;
     myArray.sort (sorter);
     @endcode
 
     @see ElementComparator
-
-    @tags{Core}
 */
 template <class ElementType>
 class DefaultElementComparator
 {
 private:
-    using ParameterType = typename TypeHelpers::ParameterType<ElementType>::type;
+    typedef PARAMETER_TYPE (ElementType) ParameterType;
 
 public:
     static int compareElements (ParameterType first, ParameterType second)
@@ -194,4 +193,5 @@ public:
     }
 };
 
-} // namespace juce
+
+#endif   // JUCE_ELEMENTCOMPARATOR_H_INCLUDED

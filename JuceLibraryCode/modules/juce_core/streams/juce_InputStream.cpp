@@ -2,30 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
-
 int64 InputStream::getNumBytesRemaining()
 {
-    auto len = getTotalLength();
+    int64 len = getTotalLength();
 
     if (len >= 0)
         len -= getPosition();
@@ -87,26 +92,23 @@ int InputStream::readIntBigEndian()
 
 int InputStream::readCompressedInt()
 {
-    auto sizeByte = (uint8) readByte();
-
+    const uint8 sizeByte = (uint8) readByte();
     if (sizeByte == 0)
         return 0;
 
     const int numBytes = (sizeByte & 0x7f);
-
     if (numBytes > 4)
     {
-        jassertfalse;  // trying to read corrupt data - this method must only be used
+        jassertfalse;    // trying to read corrupt data - this method must only be used
                        // to read data that was written by OutputStream::writeCompressedInt()
         return 0;
     }
 
-    char bytes[4] = {};
-
+    char bytes[4] = { 0, 0, 0, 0 };
     if (read (bytes, numBytes) != numBytes)
         return 0;
 
-    auto num = (int) ByteOrder::littleEndianInt (bytes);
+    const int num = (int) ByteOrder::littleEndianInt (bytes);
     return (sizeByte >> 7) ? -num : num;
 }
 
@@ -132,7 +134,8 @@ int64 InputStream::readInt64BigEndian()
 
 float InputStream::readFloat()
 {
-    static_assert (sizeof (int32) == sizeof (float), "Union assumes float has the same size as an int32");
+    // the union below relies on these types being the same size...
+    static_jassert (sizeof (int32) == sizeof (float));
     union { int32 asInt; float asFloat; } n;
     n.asInt = (int32) readInt();
     return n.asFloat;
@@ -161,32 +164,36 @@ double InputStream::readDoubleBigEndian()
 
 String InputStream::readString()
 {
-    MemoryOutputStream buffer;
+    MemoryBlock buffer (256);
+    char* data = static_cast<char*> (buffer.getData());
+    size_t i = 0;
 
-    for (;;)
+    while ((data[i] = readByte()) != 0)
     {
-        auto c = readByte();
-        buffer.writeByte (c);
-
-        if (c == 0)
-            return buffer.toUTF8();
+        if (++i >= buffer.getSize())
+        {
+            buffer.setSize (buffer.getSize() + 512);
+            data = static_cast<char*> (buffer.getData());
+        }
     }
+
+    return String::fromUTF8 (data, (int) i);
 }
 
 String InputStream::readNextLine()
 {
-    MemoryOutputStream buffer;
+    MemoryBlock buffer (256);
+    char* data = static_cast<char*> (buffer.getData());
+    size_t i = 0;
 
-    for (;;)
+    while ((data[i] = readByte()) != 0)
     {
-        auto c = readByte();
-
-        if (c == 0 || c == '\n')
+        if (data[i] == '\n')
             break;
 
-        if (c == '\r')
+        if (data[i] == '\r')
         {
-            auto lastPos = getPosition();
+            const int64 lastPos = getPosition();
 
             if (readByte() != '\n')
                 setPosition (lastPos);
@@ -194,10 +201,14 @@ String InputStream::readNextLine()
             break;
         }
 
-        buffer.writeByte (c);
+        if (++i >= buffer.getSize())
+        {
+            buffer.setSize (buffer.getSize() + 512);
+            data = static_cast<char*> (buffer.getData());
+        }
     }
 
-    return buffer.toUTF8();
+    return String::fromUTF8 (data, (int) i);
 }
 
 size_t InputStream::readIntoMemoryBlock (MemoryBlock& block, ssize_t numBytes)
@@ -218,12 +229,10 @@ void InputStream::skipNextBytes (int64 numBytesToSkip)
 {
     if (numBytesToSkip > 0)
     {
-        auto skipBufferSize = (int) jmin (numBytesToSkip, (int64) 16384);
-        HeapBlock<char> temp (skipBufferSize);
+        const int skipBufferSize = (int) jmin (numBytesToSkip, (int64) 16384);
+        HeapBlock<char> temp ((size_t) skipBufferSize);
 
         while (numBytesToSkip > 0 && ! isExhausted())
             numBytesToSkip -= read (temp, (int) jmin (numBytesToSkip, (int64) skipBufferSize));
     }
 }
-
-} // namespace juce

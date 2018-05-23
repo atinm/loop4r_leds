@@ -2,26 +2,31 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
-
-namespace juce
-{
 
 /*
     Note that a lot of methods that you'd expect to find in this file actually
@@ -81,8 +86,9 @@ namespace MacFileHelpers
             NSNumber* hidden = nil;
             NSError* err = nil;
 
-            return [createNSURLFromFile (path) getResourceValue: &hidden forKey: NSURLIsHiddenKey error: &err]
-                     && [hidden boolValue];
+            return [[NSURL fileURLWithPath: juceStringToNS (path)]
+                        getResourceValue: &hidden forKey: NSURLIsHiddenKey error: &err]
+                    && [hidden boolValue];
         }
        #elif JUCE_IOS
         return File (path).getFileName().startsWithChar ('.');
@@ -214,7 +220,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
 
             case invokedExecutableFile:
                 if (juce_argv != nullptr && juce_argc > 0)
-                    return File::getCurrentWorkingDirectory().getChildFile (String (juce_argv[0]));
+                    return File::getCurrentWorkingDirectory().getChildFile (CharPointer_UTF8 (juce_argv[0]));
                 // deliberate fall-through...
 
             case currentExecutableFile:
@@ -240,7 +246,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
                 HeapBlock<char> buffer;
                 buffer.calloc (size + 8);
 
-                _NSGetExecutablePath (buffer.get(), &size);
+                _NSGetExecutablePath (buffer.getData(), &size);
                 return File (String::fromUTF8 (buffer, (int) size));
             }
 
@@ -253,7 +259,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
             return File (resultPath.convertToPrecomposedUnicode());
     }
 
-    return {};
+    return File();
 }
 
 //==============================================================================
@@ -267,7 +273,7 @@ String File::getVersion() const
                     return nsStringToJuce (name);
     }
 
-    return {};
+    return String();
 }
 
 //==============================================================================
@@ -281,12 +287,12 @@ bool File::isSymbolicLink() const
     return getFileLink (fullPath) != nil;
 }
 
-String File::getNativeLinkedTarget() const
+File File::getLinkedTarget() const
 {
     if (NSString* dest = getFileLink (fullPath))
-        return nsStringToJuce (dest);
+        return getSiblingFile (nsStringToJuce (dest));
 
-    return {};
+    return *this;
 }
 
 //==============================================================================
@@ -295,43 +301,28 @@ bool File::moveToTrash() const
     if (! exists())
         return true;
 
+   #if JUCE_IOS
+    return deleteFile(); //xxx is there a trashcan on the iOS?
+   #else
     JUCE_AUTORELEASEPOOL
     {
-       #if (defined (__IPHONE_11_0) && __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_11_0) \
-         || (defined (MAC_OS_X_VERSION_10_8) && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_8)
-        NSError* error = nil;
-        return [[NSFileManager defaultManager] trashItemAtURL: createNSURLFromFile (*this)
-                                             resultingItemURL: nil
-                                                        error: &error];
-       #elif JUCE_IOS
-        return deleteFile();
-       #else
-        [[NSWorkspace sharedWorkspace] recycleURLs: [NSArray arrayWithObject: createNSURLFromFile (*this)]
+        NSURL* url = [NSURL fileURLWithPath: juceStringToNS (getFullPathName())];
+
+        [[NSWorkspace sharedWorkspace] recycleURLs: [NSArray arrayWithObject: url]
                                  completionHandler: nil];
-
-        // recycleURLs is async, so we need to block until it has finished. We can't use a
-        // run-loop here because it'd dispatch unexpected messages, so have to do this very
-        // nasty bodge. But this is only needed for support of pre-10.8 versions.
-        for (int retries = 100; --retries >= 0;)
-        {
-            if (! exists())
-                return true;
-
-            Thread::sleep (5);
-        }
-
-        return false;
-       #endif
+        return true;
     }
+   #endif
 }
 
 //==============================================================================
 class DirectoryIterator::NativeIterator::Pimpl
 {
 public:
-    Pimpl (const File& directory, const String& wildcard)
+    Pimpl (const File& directory, const String& wildCard_)
         : parentDir (File::addTrailingSeparator (directory.getFullPathName())),
-          wildCard (wildcard)
+          wildCard (wildCard_),
+          enumerator (nil)
     {
         JUCE_AUTORELEASEPOOL
         {
@@ -354,12 +345,8 @@ public:
 
             for (;;)
             {
-                if (enumerator == nil)
-                    return false;
-
-                NSString* file = [enumerator nextObject];
-
-                if (file == nil)
+                NSString* file;
+                if (enumerator == nil || (file = [enumerator nextObject]) == nil)
                     return false;
 
                 [enumerator skipDescendents];
@@ -371,7 +358,7 @@ public:
                 if (fnmatch (wildcardUTF8, filenameFound.toUTF8(), FNM_CASEFOLD) != 0)
                     continue;
 
-                auto fullPath = parentDir + filenameFound;
+                const String fullPath (parentDir + filenameFound);
                 updateStatInfoForFile (fullPath, isDir, fileSize, modTime, creationTime, isReadOnly);
 
                 if (isHidden != nullptr)
@@ -384,7 +371,7 @@ public:
 
 private:
     String parentDir, wildCard;
-    NSDirectoryEnumerator* enumerator = nil;
+    NSDirectoryEnumerator* enumerator;
 
     JUCE_DECLARE_NON_COPYABLE (Pimpl)
 };
@@ -412,6 +399,7 @@ bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const String& 
     JUCE_AUTORELEASEPOOL
     {
         NSString* fileNameAsNS (juceStringToNS (fileName));
+
         NSURL* filenameAsURL ([NSURL URLWithString: fileNameAsNS]);
 
         if (filenameAsURL == nil)
@@ -420,12 +408,10 @@ bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const String& 
       #if JUCE_IOS
         ignoreUnused (parameters);
 
-       #if (! defined __IPHONE_OS_VERSION_MIN_REQUIRED) || (! defined __IPHONE_10_0) || (__IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0)
+        if (SystemStats::isRunningInAppExtensionSandbox())
+            return false;
+
         return [[UIApplication sharedApplication] openURL: filenameAsURL];
-       #else
-        [[UIApplication sharedApplication] openURL: filenameAsURL options: @{} completionHandler: nil];
-        return true;
-       #endif
       #else
         NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
 
@@ -509,5 +495,3 @@ void File::addToDock() const
     }
 }
 #endif
-
-} // namespace juce

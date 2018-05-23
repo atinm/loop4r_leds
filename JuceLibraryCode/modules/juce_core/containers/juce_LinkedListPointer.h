@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_LINKEDLISTPOINTER_H_INCLUDED
+#define JUCE_LINKEDLISTPOINTER_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -49,8 +58,6 @@ namespace juce
     int numItems = myList.size(); // returns 2
     MyObject* lastInList = myList.getLast();
     @endcode
-
-    @tags{Core}
 */
 template <class ObjectType>
 class LinkedListPointer
@@ -76,6 +83,7 @@ public:
         return *this;
     }
 
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     LinkedListPointer (LinkedListPointer&& other) noexcept
         : item (other.item)
     {
@@ -90,6 +98,7 @@ public:
         other.item = nullptr;
         return *this;
     }
+   #endif
 
     //==============================================================================
     /** Returns the item which this pointer points to. */
@@ -113,7 +122,7 @@ public:
     */
     LinkedListPointer& getLast() noexcept
     {
-        auto* l = this;
+        LinkedListPointer* l = this;
 
         while (l->item != nullptr)
             l = &(l->item->nextListItem);
@@ -129,7 +138,7 @@ public:
     {
         int total = 0;
 
-        for (auto* i = item; i != nullptr; i = i->nextListItem)
+        for (ObjectType* i = item; i != nullptr; i = i->nextListItem)
             ++total;
 
         return total;
@@ -141,7 +150,7 @@ public:
     */
     LinkedListPointer& operator[] (int index) noexcept
     {
-        auto* l = this;
+        LinkedListPointer* l = this;
 
         while (--index >= 0 && l->item != nullptr)
             l = &(l->item->nextListItem);
@@ -155,7 +164,7 @@ public:
     */
     const LinkedListPointer& operator[] (int index) const noexcept
     {
-        auto* l = this;
+        const LinkedListPointer* l = this;
 
         while (--index >= 0 && l->item != nullptr)
             l = &(l->item->nextListItem);
@@ -166,7 +175,7 @@ public:
     /** Returns true if the list contains the given item. */
     bool contains (const ObjectType* const itemToLookFor) const noexcept
     {
-        for (auto* i = item; i != nullptr; i = i->nextListItem)
+        for (ObjectType* i = item; i != nullptr; i = i->nextListItem)
             if (itemToLookFor == i)
                 return true;
 
@@ -192,7 +201,7 @@ public:
     void insertAtIndex (int index, ObjectType* newItem)
     {
         jassert (newItem != nullptr);
-        auto* l = this;
+        LinkedListPointer* l = this;
 
         while (index != 0 && l->item != nullptr)
         {
@@ -211,7 +220,7 @@ public:
         jassert (newItem != nullptr);
         jassert (newItem->nextListItem == nullptr);
 
-        auto oldItem = item;
+        ObjectType* const oldItem = item;
         item = newItem;
         item->nextListItem = oldItem->nextListItem.item;
         oldItem->nextListItem.item = nullptr;
@@ -235,9 +244,9 @@ public:
     */
     void addCopyOfList (const LinkedListPointer& other)
     {
-        auto* insertPoint = this;
+        LinkedListPointer* insertPoint = this;
 
-        for (auto* i = other.item; i != nullptr; i = i->nextListItem)
+        for (ObjectType* i = other.item; i != nullptr; i = i->nextListItem)
         {
             insertPoint->insertNext (new ObjectType (*i));
             insertPoint = &(insertPoint->item->nextListItem);
@@ -250,7 +259,7 @@ public:
     */
     ObjectType* removeNext() noexcept
     {
-        auto oldItem = item;
+        ObjectType* const oldItem = item;
 
         if (oldItem != nullptr)
         {
@@ -266,7 +275,7 @@ public:
     */
     void remove (ObjectType* const itemToRemove)
     {
-        if (auto* l = findPointerTo (itemToRemove))
+        if (LinkedListPointer* const l = findPointerTo (itemToRemove))
             l->removeNext();
     }
 
@@ -277,7 +286,7 @@ public:
     {
         while (item != nullptr)
         {
-            auto oldItem = item;
+            ObjectType* const oldItem = item;
             item = oldItem->nextListItem;
             delete oldItem;
         }
@@ -289,7 +298,7 @@ public:
     */
     LinkedListPointer* findPointerTo (ObjectType* const itemToLookFor) noexcept
     {
-        auto* l = this;
+        LinkedListPointer* l = this;
 
         while (l->item != nullptr)
         {
@@ -310,7 +319,7 @@ public:
     {
         jassert (destArray != nullptr);
 
-        for (auto* i = item; i != nullptr; i = i->nextListItem)
+        for (ObjectType* i = item; i != nullptr; i = i->nextListItem)
             *destArray++ = i;
     }
 
@@ -360,4 +369,5 @@ private:
     JUCE_DECLARE_NON_COPYABLE (LinkedListPointer)
 };
 
-} // namespace juce
+
+#endif   // JUCE_LINKEDLISTPOINTER_H_INCLUDED

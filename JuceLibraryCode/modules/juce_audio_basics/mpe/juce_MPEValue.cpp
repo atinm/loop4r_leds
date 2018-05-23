@@ -2,45 +2,53 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
+MPEValue::MPEValue() noexcept  : normalisedValue (8192)
 {
+}
 
-MPEValue::MPEValue() noexcept                             {}
-MPEValue::MPEValue (int value)  : normalisedValue (value) {}
+MPEValue::MPEValue (int value)  : normalisedValue (value)
+{
+}
 
 //==============================================================================
 MPEValue MPEValue::from7BitInt (int value) noexcept
 {
     jassert (value >= 0 && value <= 127);
 
-    auto valueAs14Bit = value <= 64 ? value << 7
-                                    : int (jmap<float> (float (value - 64), 0.0f, 63.0f, 0.0f, 8191.0f)) + 8192;
-
-    return { valueAs14Bit };
+    const int valueAs14Bit = value <= 64 ? value << 7 : int (jmap<float> (float (value - 64), 0.0f, 63.0f, 0.0f, 8191.0f)) + 8192;
+    return MPEValue (valueAs14Bit);
 }
 
 MPEValue MPEValue::from14BitInt (int value) noexcept
 {
     jassert (value >= 0 && value <= 16383);
-    return { value };
+    return MPEValue (value);
 }
 
 //==============================================================================
@@ -89,7 +97,7 @@ bool MPEValue::operator!= (const MPEValue& other) const noexcept
 class MPEValueTests  : public UnitTest
 {
 public:
-    MPEValueTests() : UnitTest ("MPEValue class", "MIDI/MPE") {}
+    MPEValueTests() : UnitTest ("MPEValue class") {}
 
     void runTest() override
     {
@@ -158,13 +166,11 @@ private:
     //==============================================================================
     void expectFloatWithinRelativeError (float actualValue, float expectedValue, float maxRelativeError)
     {
-        const float maxAbsoluteError = jmax (1.0f, std::abs (expectedValue)) * maxRelativeError;
-        expect (std::abs (expectedValue - actualValue) < maxAbsoluteError);
+        const float maxAbsoluteError = jmax (1.0f, std::fabs (expectedValue)) * maxRelativeError;
+        expect (std::fabs (expectedValue - actualValue) < maxAbsoluteError);
     }
 };
 
 static MPEValueTests MPEValueUnitTests;
 
 #endif // JUCE_UNIT_TESTS
-
-} // namespace juce

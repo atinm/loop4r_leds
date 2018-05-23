@@ -2,30 +2,29 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of either:
+   a) the GPL v2 (or any later version)
+   b) the Affero GPL v3
 
-   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
-   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
-   27th April 2017).
+   Details of these licenses can be found at: www.gnu.org/licenses
 
-   End User License Agreement: www.juce.com/juce-5-licence
-   Privacy Policy: www.juce.com/juce-5-privacy-policy
+   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-   Or: You may also use this code under the terms of the GPL v3 (see
-   www.gnu.org/licenses).
+   ------------------------------------------------------------------------------
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   To release a closed-source product which uses JUCE, commercial licenses are
+   available: visit www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_OSCMESSAGE_H_INCLUDED
+#define JUCE_OSCMESSAGE_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -35,8 +34,6 @@ namespace juce
 
     OSC messages are the elementary objects that are used to exchange any data
     via OSC. An OSCSender can send OSCMessage objects to an OSCReceiver.
-
-    @tags{OSC}
 */
 class JUCE_API  OSCMessage
 {
@@ -55,6 +52,7 @@ public:
     OSCMessage (const OSCAddressPattern& ap) noexcept;
 
 
+   #if JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES && JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     /** Constructs an OSCMessage object with the given address pattern and list
         of arguments.
 
@@ -69,6 +67,7 @@ public:
     */
     template <typename Arg1, typename... Args>
     OSCMessage (const OSCAddressPattern& ap, Arg1&& arg1, Args&&... args);
+   #endif
 
     /** Sets the address pattern of the OSCMessage.
 
@@ -93,8 +92,7 @@ public:
         This method does not check the range and results in undefined behaviour
         in case i < 0 or i >= size().
     */
-    OSCArgument& operator[] (const int i) noexcept;
-    const OSCArgument& operator[] (const int i) const noexcept;
+    OSCArgument& operator[] (const int i) const noexcept;
 
     /** Returns a pointer to the first OSCArgument in the OSCMessage object.
         This method is provided for compatibility with standard C++ iteration mechanisms.
@@ -108,6 +106,7 @@ public:
 
     /** Removes all arguments from the OSCMessage. */
     void clear();
+
 
     //==============================================================================
     /** Creates a new OSCArgument of type int32 with a given value
@@ -143,6 +142,7 @@ public:
 private:
 
     //==============================================================================
+   #if JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES && JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     template <typename Arg1, typename... Args>
     void addArguments (Arg1&& arg1, Args&&... args)
     {
@@ -151,6 +151,7 @@ private:
     }
 
     void addArguments() {}
+   #endif
 
     //==============================================================================
     OSCAddressPattern addressPattern;
@@ -159,11 +160,13 @@ private:
 
 
 //==============================================================================
-template <typename Arg1, typename... Args>
-OSCMessage::OSCMessage (const OSCAddressPattern& ap, Arg1&& arg1, Args&&... args)
-    : addressPattern (ap)
-{
-    addArguments (std::forward<Arg1> (arg1), std::forward<Args> (args)...);
-}
+#if JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES && JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
+ template <typename Arg1, typename... Args>
+ OSCMessage::OSCMessage (const OSCAddressPattern& ap, Arg1&& arg1, Args&&... args)
+     : addressPattern (ap)
+ {
+     addArguments (std::forward<Arg1> (arg1), std::forward<Args> (args)...);
+ }
+#endif
 
-} // namespace juce
+#endif // JUCE_OSCMESSAGE_H_INCLUDED

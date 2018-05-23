@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_LOCALISEDSTRINGS_H_INCLUDED
+#define JUCE_LOCALISEDSTRINGS_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -61,12 +70,10 @@ namespace juce
     printSomething (TRANS("hello"));
     @endcode
 
-    This macro is used in the JUCE classes themselves, so your application has a chance to
-    intercept and translate any internal JUCE text strings that might be shown. (You can easily
-    get a list of all the messages by searching for the TRANS() macro in the JUCE source
+    This macro is used in the Juce classes themselves, so your application has a chance to
+    intercept and translate any internal Juce text strings that might be shown. (You can easily
+    get a list of all the messages by searching for the TRANS() macro in the Juce source
     code).
-
-    @tags{Core}
 */
 class JUCE_API  LocalisedStrings
 {
@@ -190,7 +197,7 @@ private:
     String languageName;
     StringArray countryCodes;
     StringPairArray translations;
-    std::unique_ptr<LocalisedStrings> fallback;
+    ScopedPointer<LocalisedStrings> fallback;
     friend struct ContainerDeletePolicy<LocalisedStrings>;
 
     void loadFromText (const String&, bool ignoreCase);
@@ -238,4 +245,5 @@ JUCE_API String translate (CharPointer_UTF8 stringLiteral);
 */
 JUCE_API String translate (const String& stringLiteral, const String& resultIfNotFound);
 
-} // namespace juce
+
+#endif   // JUCE_LOCALISEDSTRINGS_H_INCLUDED

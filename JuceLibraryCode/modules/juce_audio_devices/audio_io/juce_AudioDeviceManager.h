@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_AUDIODEVICEMANAGER_H_INCLUDED
+#define JUCE_AUDIODEVICEMANAGER_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -60,8 +69,6 @@ namespace juce
     listeners whenever one of its settings is changed.
 
     @see AudioDeviceSelectorComponent, AudioIODevice, AudioIODeviceType
-
-    @tags{Audio}
 */
 class JUCE_API  AudioDeviceManager  : public ChangeBroadcaster
 {
@@ -98,7 +105,6 @@ public:
         AudioDeviceSetup();
 
         bool operator== (const AudioDeviceSetup& other) const;
-        bool operator!= (const AudioDeviceSetup& other) const;
 
         /** The name of the audio device used for output.
             The name has to be one of the ones listed by the AudioDeviceManager's currently
@@ -237,7 +243,7 @@ public:
 
 
     /** Returns the currently-active audio device. */
-    AudioIODevice* getCurrentAudioDevice() const noexcept               { return currentAudioDevice.get(); }
+    AudioIODevice* getCurrentAudioDevice() const noexcept               { return currentAudioDevice; }
 
     /** Returns the type of audio device currently in use.
         @see setCurrentAudioDeviceType
@@ -375,7 +381,7 @@ public:
         If no device has been selected, or the device can't be opened, this will return nullptr.
         @see getDefaultMidiOutputName
     */
-    MidiOutput* getDefaultMidiOutput() const noexcept               { return defaultMidiOutput.get(); }
+    MidiOutput* getDefaultMidiOutput() const noexcept               { return defaultMidiOutput; }
 
     /** Returns a list of the types of device supported. */
     const OwnedArray<AudioIODeviceType>& getAvailableDeviceTypes();
@@ -405,44 +411,28 @@ public:
     void playTestSound();
 
     //==============================================================================
-    /**
-        A simple reference-counted struct that holds a level-meter value that can be read
-        using getCurrentLevel().
-
-        This is used to ensure that the level processing code is only executed when something
-        holds a reference to one of these objects and will be bypassed otherwise.
-
-        @see getInputLevelGetter, getOutputLevelGetter
+    /** Turns on level-measuring for input channels.
+        @see getCurrentInputLevel()
     */
-    struct LevelMeter    : public ReferenceCountedObject
-    {
-        LevelMeter() noexcept;
-        double getCurrentLevel() const noexcept;
+    void enableInputLevelMeasurement (bool enableMeasurement) noexcept;
 
-        using Ptr = ReferenceCountedObjectPtr<LevelMeter>;
-
-    private:
-        friend class AudioDeviceManager;
-
-        Atomic<float> level { 0 };
-        void updateLevel (const float* const*, int numChannels, int numSamples) noexcept;
-    };
-
-    /** Returns a reference-counted object that can be used to get the current input level.
-
-        You need to store this object locally to ensure that the reference count is incremented
-        and decremented properly. The current input level value can be read using getCurrentLevel().
+    /** Turns on level-measuring for output channels.
+        @see getCurrentOutputLevel()
     */
-    LevelMeter::Ptr getInputLevelGetter() noexcept          { return inputLevelGetter; }
+    void enableOutputLevelMeasurement (bool enableMeasurement) noexcept;
 
-    /** Returns a reference-counted object that can be used to get the current input level.
-
-        You need to store this object locally to ensure that the reference count is incremented
-        and decremented properly. The current input level value can be read using getCurrentLevel().
+    /** Returns the current input level.
+        To use this, you must first enable it by calling enableInputLevelMeasurement().
+        @see enableInputLevelMeasurement()
     */
-    LevelMeter::Ptr getOutputLevelGetter() noexcept         { return outputLevelGetter; }
+    double getCurrentInputLevel() const noexcept;
 
-    //==============================================================================
+    /** Returns the current output level.
+        To use this, you must first enable it by calling enableOutputLevelMeasurement().
+        @see enableOutputLevelMeasurement()
+    */
+    double getCurrentOutputLevel() const noexcept;
+
     /** Returns the a lock that can be used to synchronise access to the audio callback.
         Obviously while this is locked, you're blocking the audio thread from running, so
         it must only be used for very brief periods when absolutely necessary.
@@ -455,29 +445,20 @@ public:
     */
     CriticalSection& getMidiCallbackLock() noexcept         { return midiCallbackLock; }
 
-    //==============================================================================
-    /** Returns the number of under- or over runs reported.
-
-        This method will use the underlying device's native getXRunCount if it supports
-        it. Otherwise it will estimate the number of under-/overruns by measuring the
-        time it spent in the audio callback.
-    */
-    int getXRunCount() const noexcept;
-
 private:
     //==============================================================================
     OwnedArray<AudioIODeviceType> availableDeviceTypes;
     OwnedArray<AudioDeviceSetup> lastDeviceTypeConfigs;
 
     AudioDeviceSetup currentSetup;
-    std::unique_ptr<AudioIODevice> currentAudioDevice;
+    ScopedPointer<AudioIODevice> currentAudioDevice;
     Array<AudioIODeviceCallback*> callbacks;
-    int numInputChansNeeded = 0, numOutputChansNeeded = 2;
+    int numInputChansNeeded, numOutputChansNeeded;
     String currentDeviceType;
     BigInteger inputChannels, outputChannels;
-    std::unique_ptr<XmlElement> lastExplicitSettings;
-    mutable bool listNeedsScanning = true;
-    AudioBuffer<float> tempBuffer;
+    ScopedPointer<XmlElement> lastExplicitSettings;
+    mutable bool listNeedsScanning;
+    AudioSampleBuffer tempBuffer;
 
     struct MidiCallbackInfo
     {
@@ -490,23 +471,32 @@ private:
     Array<MidiCallbackInfo> midiCallbacks;
 
     String defaultMidiOutputName;
-    std::unique_ptr<MidiOutput> defaultMidiOutput;
+    ScopedPointer<MidiOutput> defaultMidiOutput;
     CriticalSection audioCallbackLock, midiCallbackLock;
 
-    std::unique_ptr<AudioBuffer<float>> testSound;
-    int testSoundPosition = 0;
+    ScopedPointer<AudioSampleBuffer> testSound;
+    int testSoundPosition;
 
-    double cpuUsageMs = 0, timeToCpuScale = 0, msPerBlock = 0;
-    int xruns = 0;
+    double cpuUsageMs, timeToCpuScale;
 
-    LevelMeter::Ptr inputLevelGetter   { new LevelMeter() },
-                    outputLevelGetter  { new LevelMeter() };
+    struct LevelMeter
+    {
+        LevelMeter() noexcept;
+        void updateLevel (const float* const*, int numChannels, int numSamples) noexcept;
+        void setEnabled (bool) noexcept;
+        double getCurrentLevel() const noexcept;
+
+        Atomic<int> enabled;
+        double level;
+    };
+
+    LevelMeter inputLevelMeter, outputLevelMeter;
 
     //==============================================================================
     class CallbackHandler;
     friend class CallbackHandler;
     friend struct ContainerDeletePolicy<CallbackHandler>;
-    std::unique_ptr<CallbackHandler> callbackHandler;
+    ScopedPointer<CallbackHandler> callbackHandler;
 
     void audioDeviceIOCallbackInt (const float** inputChannelData, int totalNumInputChannels,
                                    float** outputChannelData, int totalNumOutputChannels, int numSamples);
@@ -538,4 +528,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioDeviceManager)
 };
 
-} // namespace juce
+#endif   // JUCE_AUDIODEVICEMANAGER_H_INCLUDED

@@ -2,30 +2,25 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of either:
+   a) the GPL v2 (or any later version)
+   b) the Affero GPL v3
 
-   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
-   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
-   27th April 2017).
+   Details of these licenses can be found at: www.gnu.org/licenses
 
-   End User License Agreement: www.juce.com/juce-5-licence
-   Privacy Policy: www.juce.com/juce-5-privacy-policy
+   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-   Or: You may also use this code under the terms of the GPL v3 (see
-   www.gnu.org/licenses).
+   ------------------------------------------------------------------------------
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   To release a closed-source product which uses JUCE, commercial licenses are
+   available: visit www.juce.com for more information.
 
   ==============================================================================
 */
-
-namespace juce
-{
 
 namespace
 {
@@ -60,7 +55,7 @@ namespace
         size_t getDataSize() const noexcept         { return input.getDataSize(); }
 
         /** Returns the current position of the stream. */
-        uint64 getPosition()                        { return uint64 (input.getPosition()); }
+        uint64 getPosition()                         { return uint64 (input.getPosition()); }
 
         /** Attempts to set the current position of the stream. Returns true if this was successful. */
         bool setPosition (int64 pos)                { return input.setPosition (pos); }
@@ -101,9 +96,9 @@ namespace
             if (input.getNumBytesRemaining() < 4)
                 throw OSCFormatError ("OSC input stream exhausted while reading string");
 
-            auto posBegin = (size_t) getPosition();
-            auto s = input.readString();
-            auto posEnd = (size_t) getPosition();
+            const size_t posBegin = (size_t) getPosition();
+            String s (input.readString());
+            const size_t posEnd = (size_t) getPosition();
 
             if (static_cast<const char*> (getData()) [posEnd - 1] != '\0')
                 throw OSCFormatError ("OSC input stream exhausted before finding null terminator of string");
@@ -119,14 +114,14 @@ namespace
             if (input.getNumBytesRemaining() < 4)
                 throw OSCFormatError ("OSC input stream exhausted while reading blob");
 
-            auto blobDataSize = (size_t) input.readIntBigEndian();
+            const size_t blobDataSize = (size_t) input.readIntBigEndian();
 
             if ((size_t) input.getNumBytesRemaining() < (blobDataSize + 3) % 4)
                 throw OSCFormatError ("OSC input stream exhausted before reaching end of blob");
 
             MemoryBlock blob;
 
-            auto bytesRead = input.readIntoMemoryBlock (blob, (ssize_t) blobDataSize);
+            const size_t bytesRead = input.readIntoMemoryBlock (blob, (ssize_t) blobDataSize);
             readPaddingZeros (bytesRead);
 
             return blob;
@@ -177,7 +172,7 @@ namespace
                 typeList.add (type);
             }
 
-            auto bytesRead = (size_t) typeList.size() + 2;
+            size_t bytesRead = (size_t) typeList.size() + 2;
             readPaddingZeros (bytesRead);
 
             return typeList;
@@ -203,13 +198,13 @@ namespace
         //==============================================================================
         OSCMessage readMessage()
         {
-            auto ap = readAddressPattern();
-            auto types = readTypeTagString();
+            OSCAddressPattern ap = readAddressPattern();
+            OSCTypeList types = readTypeTagString();
 
             OSCMessage msg (ap);
 
-            for (auto& type : types)
-                msg.addArgument (readArgument (type));
+            for (OSCType* type = types.begin(); type != types.end(); ++type)
+                msg.addArgument (readArgument (*type));
 
             return msg;
         }
@@ -230,14 +225,14 @@ namespace
             OSCBundle bundle (readTimeTag());
 
             size_t bytesRead = 16; // already read "#bundle" and timeTag
-            auto pos = getPosition();
+            size_t pos = getPosition();
 
             while (! isExhausted() && bytesRead < maxBytesToRead)
             {
                 bundle.addElement (readElement());
 
-                auto newPos = getPosition();
-                bytesRead += (size_t) (newPos - pos);
+                const size_t newPos = getPosition();
+                bytesRead += newPos - pos;
                 pos = newPos;
             }
 
@@ -248,12 +243,12 @@ namespace
         OSCBundle::Element readElement()
         {
             if (input.getNumBytesRemaining() < 4)
-                throw OSCFormatError ("OSC input stream exhausted while reading bundle element size");
+                throw OSCFormatError("OSC input stream exhausted while reading bundle element size");
 
-            auto elementSize = (size_t) readInt32();
+            const size_t elementSize = (size_t) readInt32();
 
             if (elementSize < 4)
-                throw OSCFormatError ("OSC input stream format error: invalid bundle element size");
+                throw OSCFormatError("OSC input stream format error: invalid bundle element size");
 
             return readElementWithKnownSize (elementSize);
         }
@@ -264,7 +259,7 @@ namespace
             if ((uint64) input.getNumBytesRemaining() < elementSize)
                 throw OSCFormatError ("OSC input stream exhausted while reading bundle element content");
 
-            auto firstContentChar = static_cast<const char*> (getData()) [getPosition()];
+            const char firstContentChar = static_cast<const char*> (getData()) [getPosition()];
 
             if (firstContentChar == '/')  return OSCBundle::Element (readMessageWithCheckedSize (elementSize));
             if (firstContentChar == '#')  return OSCBundle::Element (readBundleWithCheckedSize (elementSize));
@@ -291,8 +286,8 @@ namespace
 
         OSCBundle readBundleWithCheckedSize (size_t size)
         {
-            auto begin = (size_t) getPosition();
-            auto maxBytesToRead = size - 4; // we've already read 4 bytes (the bundle size)
+            const size_t begin = (size_t) getPosition();
+            const size_t maxBytesToRead = size - 4; // we've already read 4 bytes (the bundle size)
 
             OSCBundle bundle (readBundle (maxBytesToRead));
 
@@ -304,7 +299,7 @@ namespace
 
         OSCMessage readMessageWithCheckedSize (size_t size)
         {
-            auto begin = (size_t) getPosition();
+            const size_t begin = (size_t) getPosition();
             OSCMessage message (readMessage());
 
             if (getPosition() - begin != size)
@@ -321,7 +316,9 @@ namespace
 struct OSCReceiver::Pimpl   : private Thread,
                               private MessageListener
 {
-    Pimpl (const String& threadName)  : Thread (threadName)
+    Pimpl()
+      : Thread ("Juce OSC server"),
+        formatErrorHandler (nullptr)
     {
     }
 
@@ -331,26 +328,17 @@ struct OSCReceiver::Pimpl   : private Thread,
     }
 
     //==============================================================================
-    bool connectToPort (int portNumber)
+    bool connectToPort (int portNum)
     {
         if (! disconnect())
             return false;
 
-        socket.setOwned (new DatagramSocket (false));
+        portNumber = portNum;
+        socket = new DatagramSocket (false);
 
         if (! socket->bindToPort (portNumber))
             return false;
 
-        startThread();
-        return true;
-    }
-
-    bool connectToSocket (DatagramSocket& newSocket)
-    {
-        if (! disconnect())
-            return false;
-
-        socket.setNonOwned (&newSocket);
         startThread();
         return true;
     }
@@ -360,23 +348,20 @@ struct OSCReceiver::Pimpl   : private Thread,
         if (socket != nullptr)
         {
             signalThreadShouldExit();
-
-            if (socket.willDeleteObject())
-                socket->shutdown();
-
+            socket->shutdown();
             waitForThreadToExit (10000);
-            socket.reset();
+            socket = nullptr;
         }
         return true;
     }
 
     //==============================================================================
-    void addListener (OSCReceiver::Listener<MessageLoopCallback>* listenerToAdd)
+    void addListener (Listener<MessageLoopCallback>* listenerToAdd)
     {
         listeners.add (listenerToAdd);
     }
 
-    void addListener (OSCReceiver::Listener<RealtimeCallback>* listenerToAdd)
+    void addListener (Listener<RealtimeCallback>* listenerToAdd)
     {
         realtimeListeners.add (listenerToAdd);
     }
@@ -387,17 +372,18 @@ struct OSCReceiver::Pimpl   : private Thread,
         addListenerWithAddress (listenerToAdd, addressToMatch, listenersWithAddress);
     }
 
-    void addListener (ListenerWithOSCAddress<RealtimeCallback>* listenerToAdd, OSCAddress addressToMatch)
+    void addListener (ListenerWithOSCAddress<RealtimeCallback>* listenerToAdd,
+                      OSCAddress addressToMatch)
     {
         addListenerWithAddress (listenerToAdd, addressToMatch, realtimeListenersWithAddress);
     }
 
-    void removeListener (OSCReceiver::Listener<MessageLoopCallback>* listenerToRemove)
+    void removeListener (Listener<MessageLoopCallback>* listenerToRemove)
     {
         listeners.remove (listenerToRemove);
     }
 
-    void removeListener (OSCReceiver::Listener<RealtimeCallback>* listenerToRemove)
+    void removeListener (Listener<RealtimeCallback>* listenerToRemove)
     {
         realtimeListeners.remove (listenerToRemove);
     }
@@ -428,7 +414,7 @@ struct OSCReceiver::Pimpl   : private Thread,
 
         try
         {
-            auto content = inStream.readElementWithKnownSize (dataSize);
+            OSCBundle::Element content = inStream.readElementWithKnownSize (dataSize);
 
             // realtime listeners should receive the OSC content first - and immediately
             // on this thread:
@@ -468,7 +454,7 @@ private:
             if (threadShouldExit())
                 return;
 
-            auto bytesRead = (size_t) socket->read (buffer, (int) sizeof (buffer), false);
+            const size_t bytesRead = (size_t) socket->read (buffer, (int) sizeof (buffer), false);
 
             if (bytesRead >= 4)
                 handleBuffer (buffer, bytesRead);
@@ -479,10 +465,10 @@ private:
     template <typename ListenerType>
     void addListenerWithAddress (ListenerType* listenerToAdd,
                                  OSCAddress address,
-                                 Array<std::pair<OSCAddress, ListenerType*>>& array)
+                                 Array<std::pair<OSCAddress, ListenerType*> >& array)
     {
-        for (auto& i : array)
-            if (address == i.first && listenerToAdd == i.second)
+        for (int i = 0; i < array.size(); ++i)
+            if (address == array.getReference (i).first && listenerToAdd == array.getReference (i).second)
                 return;
 
         array.add (std::make_pair (address, listenerToAdd));
@@ -491,7 +477,7 @@ private:
     //==============================================================================
     template <typename ListenerType>
     void removeListenerWithAddress (ListenerType* listenerToRemove,
-                                    Array<std::pair<OSCAddress, ListenerType*>>& array)
+                                    Array<std::pair<OSCAddress, ListenerType*> >& array)
     {
         for (int i = 0; i < array.size(); ++i)
         {
@@ -510,9 +496,9 @@ private:
     //==============================================================================
     void handleMessage (const Message& msg) override
     {
-        if (auto* callbackMessage = dynamic_cast<const CallbackMessage*> (&msg))
+        if (const CallbackMessage* callbackMessage = dynamic_cast<const CallbackMessage*> (&msg))
         {
-            auto& content = callbackMessage->content;
+            const OSCBundle::Element& content = callbackMessage->content;
 
             callListeners (content);
 
@@ -524,79 +510,76 @@ private:
     //==============================================================================
     void callListeners (const OSCBundle::Element& content)
     {
-        using Listener = OSCReceiver::Listener<OSCReceiver::MessageLoopCallback>;
+        typedef OSCReceiver::Listener<OSCReceiver::MessageLoopCallback> Listener;
 
         if (content.isMessage())
-        {
-            auto&& message = content.getMessage();
-            listeners.call ([&] (Listener& l) { l.oscMessageReceived (message); });
-        }
+            listeners.call (&Listener::oscMessageReceived, content.getMessage());
         else if (content.isBundle())
-        {
-            auto&& bundle = content.getBundle();
-            listeners.call ([&] (Listener& l) { l.oscBundleReceived (bundle); });
-        }
+            listeners.call (&Listener::oscBundleReceived, content.getBundle());
     }
 
     void callRealtimeListeners (const OSCBundle::Element& content)
     {
-        using Listener = OSCReceiver::Listener<OSCReceiver::RealtimeCallback>;
+        typedef OSCReceiver::Listener<OSCReceiver::RealtimeCallback> Listener;
 
         if (content.isMessage())
-        {
-            auto&& message = content.getMessage();
-            realtimeListeners.call ([&] (Listener& l) { l.oscMessageReceived (message); });
-        }
+            realtimeListeners.call (&Listener::oscMessageReceived, content.getMessage());
         else if (content.isBundle())
-        {
-            auto&& bundle = content.getBundle();
-            realtimeListeners.call ([&] (Listener& l) { l.oscBundleReceived (bundle); });
-        }
+            realtimeListeners.call (&Listener::oscBundleReceived, content.getBundle());
     }
 
     //==============================================================================
     void callListenersWithAddress (const OSCMessage& message)
     {
-        for (auto& entry : listenersWithAddress)
-            if (auto* listener = entry.second)
-                if (message.getAddressPattern().matches (entry.first))
+        typedef OSCReceiver::ListenerWithOSCAddress<OSCReceiver::MessageLoopCallback> Listener;
+
+        for (std::pair<OSCAddress, Listener*>* entry = listenersWithAddress.begin();
+             entry != listenersWithAddress.end();
+             ++entry)
+        {
+            if (Listener* listener = entry->second)
+                if (message.getAddressPattern().matches (entry->first))
                     listener->oscMessageReceived (message);
+        }
     }
 
     void callRealtimeListenersWithAddress (const OSCMessage& message)
     {
-        for (auto& entry : realtimeListenersWithAddress)
-            if (auto* listener = entry.second)
-                if (message.getAddressPattern().matches (entry.first))
+        typedef OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback> Listener;
+
+        for (std::pair<OSCAddress, Listener*>* entry = realtimeListenersWithAddress.begin();
+             entry != realtimeListenersWithAddress.end();
+             ++entry)
+        {
+            if (Listener* listener = entry->second)
+                if (message.getAddressPattern().matches (entry->first))
                     listener->oscMessageReceived (message);
+        }
     }
 
     //==============================================================================
-    ListenerList<OSCReceiver::Listener<OSCReceiver::MessageLoopCallback>> listeners;
-    ListenerList<OSCReceiver::Listener<OSCReceiver::RealtimeCallback>>    realtimeListeners;
+    ListenerList<OSCReceiver::Listener<OSCReceiver::MessageLoopCallback> > listeners;
+    ListenerList<OSCReceiver::Listener<OSCReceiver::RealtimeCallback> >    realtimeListeners;
 
-    Array<std::pair<OSCAddress, OSCReceiver::ListenerWithOSCAddress<OSCReceiver::MessageLoopCallback>*>> listenersWithAddress;
-    Array<std::pair<OSCAddress, OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>*>>    realtimeListenersWithAddress;
+    Array<std::pair<OSCAddress, OSCReceiver::ListenerWithOSCAddress<OSCReceiver::MessageLoopCallback>* > > listenersWithAddress;
+    Array<std::pair<OSCAddress, OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>* > >    realtimeListenersWithAddress;
 
-    OptionalScopedPointer<DatagramSocket> socket;
-    OSCReceiver::FormatErrorHandler formatErrorHandler { nullptr };
+    ScopedPointer<DatagramSocket> socket;
+    int portNumber;
+    OSCReceiver::FormatErrorHandler formatErrorHandler;
     enum { oscBufferSize = 4098 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 //==============================================================================
-OSCReceiver::OSCReceiver (const String& threadName)   : pimpl (new Pimpl (threadName))
-{
-}
-
-OSCReceiver::OSCReceiver()  : OSCReceiver ("JUCE OSC server")
+OSCReceiver::OSCReceiver()   : pimpl (new Pimpl())
 {
 }
 
 OSCReceiver::~OSCReceiver()
 {
-    pimpl.reset();
+    pimpl = nullptr;
 }
 
 bool OSCReceiver::connect (int portNumber)
@@ -604,17 +587,12 @@ bool OSCReceiver::connect (int portNumber)
     return pimpl->connectToPort (portNumber);
 }
 
-bool OSCReceiver::connectToSocket (DatagramSocket& socket)
-{
-    return pimpl->connectToSocket (socket);
-}
-
 bool OSCReceiver::disconnect()
 {
     return pimpl->disconnect();
 }
 
-void OSCReceiver::addListener (OSCReceiver::Listener<MessageLoopCallback>* listenerToAdd)
+void OSCReceiver::addListener (Listener<MessageLoopCallback>* listenerToAdd)
 {
     pimpl->addListener (listenerToAdd);
 }
@@ -667,7 +645,7 @@ void OSCReceiver::registerFormatErrorHandler (FormatErrorHandler handler)
 class OSCInputStreamTests  : public UnitTest
 {
 public:
-    OSCInputStreamTests() : UnitTest ("OSCInputStream class", "OSC") {}
+    OSCInputStreamTests() : UnitTest ("OSCInputStream class") {}
 
     void runTest()
     {
@@ -1188,5 +1166,3 @@ public:
 static OSCInputStreamTests OSCInputStreamUnitTests;
 
 #endif // JUCE_UNIT_TESTS
-
-} // namespace juce

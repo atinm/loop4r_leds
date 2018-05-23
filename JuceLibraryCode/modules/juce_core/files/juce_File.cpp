@@ -2,26 +2,31 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
-
-namespace juce
-{
 
 File::File (const String& fullPathName)
     : fullPath (parseAbsolutePath (fullPathName))
@@ -52,6 +57,7 @@ File& File::operator= (const File& other)
     return *this;
 }
 
+#if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
 File::File (File&& other) noexcept
     : fullPath (static_cast<String&&> (other.fullPath))
 {
@@ -62,8 +68,11 @@ File& File::operator= (File&& other) noexcept
     fullPath = static_cast<String&&> (other.fullPath);
     return *this;
 }
+#endif
 
-JUCE_DECLARE_DEPRECATED_STATIC (const File File::nonexistent;)
+#if JUCE_ALLOW_STATIC_NULL_VARIABLES
+const File File::nonexistent;
+#endif
 
 //==============================================================================
 static String removeEllipsis (const String& path)
@@ -77,12 +86,12 @@ static String removeEllipsis (const String& path)
    #endif
     {
         StringArray toks;
-        toks.addTokens (path, File::getSeparatorString(), {});
+        toks.addTokens (path, File::separatorString, StringRef());
         bool anythingChanged = false;
 
         for (int i = 1; i < toks.size(); ++i)
         {
-            auto& t = toks[i];
+            const String& t = toks[i];
 
             if (t == ".." && toks[i - 1] != "..")
             {
@@ -98,29 +107,24 @@ static String removeEllipsis (const String& path)
         }
 
         if (anythingChanged)
-            return toks.joinIntoString (File::getSeparatorString());
+            return toks.joinIntoString (File::separatorString);
     }
 
     return path;
 }
 
-bool File::isRoot() const
-{
-    return fullPath.isNotEmpty() && *this == getParentDirectory();
-}
-
 String File::parseAbsolutePath (const String& p)
 {
     if (p.isEmpty())
-        return {};
+        return String();
 
 #if JUCE_WINDOWS
     // Windows..
-    auto path = removeEllipsis (p.replaceCharacter ('/', '\\'));
+    String path (removeEllipsis (p.replaceCharacter ('/', '\\')));
 
-    if (path.startsWithChar (getSeparatorChar()))
+    if (path.startsWithChar (separator))
     {
-        if (path[1] != getSeparatorChar())
+        if (path[1] != separator)
         {
             /*  When you supply a raw string to the File object constructor, it must be an absolute path.
                 If you're trying to parse a string that may be either a relative path or an absolute path,
@@ -155,11 +159,11 @@ String File::parseAbsolutePath (const String& p)
     // If that's why you've ended up here, use File::getChildFile() to build your paths instead.
     jassert ((! p.containsChar ('\\')) || (p.indexOfChar ('/') >= 0 && p.indexOfChar ('/') < p.indexOfChar ('\\')));
 
-    auto path = removeEllipsis (p);
+    String path (removeEllipsis (p));
 
     if (path.startsWithChar ('~'))
     {
-        if (path[1] == getSeparatorChar() || path[1] == 0)
+        if (path[1] == separator || path[1] == 0)
         {
             // expand a name of the form "~/abc"
             path = File::getSpecialLocation (File::userHomeDirectory).getFullPathName()
@@ -168,13 +172,13 @@ String File::parseAbsolutePath (const String& p)
         else
         {
             // expand a name of type "~dave/abc"
-            auto userName = path.substring (1).upToFirstOccurrenceOf ("/", false, false);
+            const String userName (path.substring (1).upToFirstOccurrenceOf ("/", false, false));
 
-            if (auto* pw = getpwnam (userName.toUTF8()))
+            if (struct passwd* const pw = getpwnam (userName.toUTF8()))
                 path = addTrailingSeparator (pw->pw_dir) + path.fromFirstOccurrenceOf ("/", false, false);
         }
     }
-    else if (! path.startsWithChar (getSeparatorChar()))
+    else if (! path.startsWithChar (separator))
     {
        #if JUCE_DEBUG || JUCE_LOG_ASSERTIONS
         if (! (path.startsWith ("./") || path.startsWith ("../")))
@@ -198,7 +202,7 @@ String File::parseAbsolutePath (const String& p)
     }
 #endif
 
-    while (path.endsWithChar (getSeparatorChar()) && path != getSeparatorString()) // careful not to turn a single "/" into an empty string.
+    while (path.endsWithChar (separator) && path != separatorString) // careful not to turn a single "/" into an empty string.
         path = path.dropLastCharacters (1);
 
     return path;
@@ -206,8 +210,8 @@ String File::parseAbsolutePath (const String& p)
 
 String File::addTrailingSeparator (const String& path)
 {
-    return path.endsWithChar (getSeparatorChar()) ? path
-                                                  : path + getSeparatorChar();
+    return path.endsWithChar (separator) ? path
+                                         : path + separator;
 }
 
 //==============================================================================
@@ -245,8 +249,13 @@ bool File::setReadOnly (const bool shouldBeReadOnly,
     bool worked = true;
 
     if (applyRecursively && isDirectory())
-        for (auto& f : findChildFiles (File::findFilesAndDirectories, false))
-            worked = f.setReadOnly (shouldBeReadOnly, true) && worked;
+    {
+        Array <File> subFiles;
+        findChildFiles (subFiles, File::findFilesAndDirectories, false);
+
+        for (int i = subFiles.size(); --i >= 0;)
+            worked = subFiles.getReference(i).setReadOnly (shouldBeReadOnly, true) && worked;
+    }
 
     return setFileReadOnlyInternal (shouldBeReadOnly) && worked;
 }
@@ -261,8 +270,13 @@ bool File::deleteRecursively() const
     bool worked = true;
 
     if (isDirectory())
-        for (auto& f : findChildFiles (File::findFilesAndDirectories, false))
-            worked = f.deleteRecursively() && worked;
+    {
+        Array<File> subFiles;
+        findChildFiles (subFiles, File::findFilesAndDirectories, false);
+
+        for (int i = subFiles.size(); --i >= 0;)
+            worked = subFiles.getReference(i).deleteRecursively() && worked;
+    }
 
     return deleteFile() && worked;
 }
@@ -309,12 +323,18 @@ bool File::copyDirectoryTo (const File& newDirectory) const
 {
     if (isDirectory() && newDirectory.createDirectory())
     {
-        for (auto& f : findChildFiles (File::findFiles, false))
-            if (! f.copyFileTo (newDirectory.getChildFile (f.getFileName())))
+        Array<File> subFiles;
+        findChildFiles (subFiles, File::findFiles, false);
+
+        for (int i = 0; i < subFiles.size(); ++i)
+            if (! subFiles.getReference(i).copyFileTo (newDirectory.getChildFile (subFiles.getReference(i).getFileName())))
                 return false;
 
-        for (auto& f : findChildFiles (File::findDirectories, false))
-            if (! f.copyDirectoryTo (newDirectory.getChildFile (f.getFileName())))
+        subFiles.clear();
+        findChildFiles (subFiles, File::findDirectories, false);
+
+        for (int i = 0; i < subFiles.size(); ++i)
+            if (! subFiles.getReference(i).copyDirectoryTo (newDirectory.getChildFile (subFiles.getReference(i).getFileName())))
                 return false;
 
         return true;
@@ -326,32 +346,34 @@ bool File::copyDirectoryTo (const File& newDirectory) const
 //==============================================================================
 String File::getPathUpToLastSlash() const
 {
-    auto lastSlash = fullPath.lastIndexOfChar (getSeparatorChar());
+    const int lastSlash = fullPath.lastIndexOfChar (separator);
 
     if (lastSlash > 0)
         return fullPath.substring (0, lastSlash);
 
     if (lastSlash == 0)
-        return getSeparatorString();
+        return separatorString;
 
     return fullPath;
 }
 
 File File::getParentDirectory() const
 {
-    return createFileWithoutCheckingPath (getPathUpToLastSlash());
+    File f;
+    f.fullPath = getPathUpToLastSlash();
+    return f;
 }
 
 //==============================================================================
 String File::getFileName() const
 {
-    return fullPath.substring (fullPath.lastIndexOfChar (getSeparatorChar()) + 1);
+    return fullPath.substring (fullPath.lastIndexOfChar (separator) + 1);
 }
 
 String File::getFileNameWithoutExtension() const
 {
-    auto lastSlash = fullPath.lastIndexOfChar (getSeparatorChar()) + 1;
-    auto lastDot   = fullPath.lastIndexOfChar ('.');
+    const int lastSlash = fullPath.lastIndexOfChar (separator) + 1;
+    const int lastDot   = fullPath.lastIndexOfChar ('.');
 
     if (lastDot > lastSlash)
         return fullPath.substring (lastSlash, lastDot);
@@ -364,7 +386,7 @@ bool File::isAChildOf (const File& potentialParent) const
     if (potentialParent.fullPath.isEmpty())
         return false;
 
-    auto ourPath = getPathUpToLastSlash();
+    const String ourPath (getPathUpToLastSlash());
 
     if (compareFilenames (potentialParent.fullPath, ourPath) == 0)
         return true;
@@ -381,9 +403,9 @@ int64 File::hashCode64() const  { return fullPath.hashCode64(); }
 //==============================================================================
 bool File::isAbsolutePath (StringRef path)
 {
-    auto firstChar = *(path.text);
+    const juce_wchar firstChar = *(path.text);
 
-    return firstChar == getSeparatorChar()
+    return firstChar == separator
            #if JUCE_WINDOWS
             || (firstChar != 0 && path.text[1] == ':');
            #else
@@ -393,7 +415,7 @@ bool File::isAbsolutePath (StringRef path)
 
 File File::getChildFile (StringRef relativePath) const
 {
-    auto r = relativePath.text;
+    String::CharPointerType r = relativePath.text;
 
     if (isAbsolutePath (r))
         return File (String (r));
@@ -403,26 +425,24 @@ File File::getChildFile (StringRef relativePath) const
         return getChildFile (String (r).replaceCharacter ('/', '\\'));
    #endif
 
-    auto path = fullPath;
-    auto separatorChar = getSeparatorChar();
+    String path (fullPath);
 
     while (*r == '.')
     {
-        auto lastPos = r;
-        auto secondChar = *++r;
+        String::CharPointerType lastPos = r;
+        const juce_wchar secondChar = *++r;
 
         if (secondChar == '.') // remove "../"
         {
-            auto thirdChar = *++r;
+            const juce_wchar thirdChar = *++r;
 
-            if (thirdChar == separatorChar || thirdChar == 0)
+            if (thirdChar == separator || thirdChar == 0)
             {
-                auto lastSlash = path.lastIndexOfChar (separatorChar);
-
+                const int lastSlash = path.lastIndexOfChar (separator);
                 if (lastSlash >= 0)
                     path = path.substring (0, lastSlash);
 
-                while (*r == separatorChar) // ignore duplicate slashes
+                while (*r == separator) // ignore duplicate slashes
                     ++r;
             }
             else
@@ -431,9 +451,9 @@ File File::getChildFile (StringRef relativePath) const
                 break;
             }
         }
-        else if (secondChar == separatorChar || secondChar == 0)  // remove "./"
+        else if (secondChar == separator || secondChar == 0)  // remove "./"
         {
-            while (*r == separatorChar) // ignore duplicate slashes
+            while (*r == separator) // ignore duplicate slashes
                 ++r;
         }
         else
@@ -474,12 +494,12 @@ Result File::create() const
     if (exists())
         return Result::ok();
 
-    auto parentDir = getParentDirectory();
+    const File parentDir (getParentDirectory());
 
     if (parentDir == *this)
         return Result::fail ("Cannot create parent directory");
 
-    auto r = parentDir.createDirectory();
+    Result r (parentDir.createDirectory());
 
     if (r.wasOk())
     {
@@ -495,15 +515,15 @@ Result File::createDirectory() const
     if (isDirectory())
         return Result::ok();
 
-    auto parentDir = getParentDirectory();
+    const File parentDir (getParentDirectory());
 
     if (parentDir == *this)
         return Result::fail ("Cannot create parent directory");
 
-    auto r = parentDir.createDirectory();
+    Result r (parentDir.createDirectory());
 
     if (r.wasOk())
-        r = createDirectoryInternal (fullPath.trimCharactersAtEnd (getSeparatorString()));
+        r = createDirectoryInternal (fullPath.trimCharactersAtEnd (separatorString));
 
     return r;
 }
@@ -530,7 +550,7 @@ bool File::loadFileAsData (MemoryBlock& destBlock) const
 String File::loadFileAsString() const
 {
     if (! existsAsFile())
-        return {};
+        return String();
 
     FileInputStream in (*this);
     return in.openedOk() ? in.readEntireStreamAsString()
@@ -543,18 +563,14 @@ void File::readLines (StringArray& destLines) const
 }
 
 //==============================================================================
-Array<File> File::findChildFiles (int whatToLookFor, bool searchRecursively, const String& wildcard) const
-{
-    Array<File> results;
-    findChildFiles (results, whatToLookFor, searchRecursively, wildcard);
-    return results;
-}
-
-int File::findChildFiles (Array<File>& results, int whatToLookFor, bool searchRecursively, const String& wildcard) const
+int File::findChildFiles (Array<File>& results,
+                          const int whatToLookFor,
+                          const bool searchRecursively,
+                          const String& wildCardPattern) const
 {
     int total = 0;
 
-    for (DirectoryIterator di (*this, searchRecursively, wildcard, whatToLookFor); di.next();)
+    for (DirectoryIterator di (*this, searchRecursively, wildCardPattern, whatToLookFor); di.next();)
     {
         results.add (di.getFile());
         ++total;
@@ -587,20 +603,20 @@ File File::getNonexistentChildFile (const String& suggestedPrefix,
                                     const String& suffix,
                                     bool putNumbersInBrackets) const
 {
-    auto f = getChildFile (suggestedPrefix + suffix);
+    File f (getChildFile (suggestedPrefix + suffix));
 
     if (f.exists())
     {
         int number = 1;
-        auto prefix = suggestedPrefix;
+        String prefix (suggestedPrefix);
 
         // remove any bracketed numbers that may already be on the end..
         if (prefix.trim().endsWithChar (')'))
         {
             putNumbersInBrackets = true;
 
-            auto openBracks  = prefix.lastIndexOfChar ('(');
-            auto closeBracks = prefix.lastIndexOfChar (')');
+            const int openBracks  = prefix.lastIndexOfChar ('(');
+            const int closeBracks = prefix.lastIndexOfChar (')');
 
             if (openBracks > 0
                  && closeBracks > openBracks
@@ -613,7 +629,7 @@ File File::getNonexistentChildFile (const String& suggestedPrefix,
 
         do
         {
-            auto newName = prefix;
+            String newName (prefix);
 
             if (putNumbersInBrackets)
             {
@@ -648,20 +664,20 @@ File File::getNonexistentSibling (const bool putNumbersInBrackets) const
 //==============================================================================
 String File::getFileExtension() const
 {
-    auto indexOfDot = fullPath.lastIndexOfChar ('.');
+    const int indexOfDot = fullPath.lastIndexOfChar ('.');
 
-    if (indexOfDot > fullPath.lastIndexOfChar (getSeparatorChar()))
+    if (indexOfDot > fullPath.lastIndexOfChar (separator))
         return fullPath.substring (indexOfDot);
 
-    return {};
+    return String();
 }
 
 bool File::hasFileExtension (StringRef possibleSuffix) const
 {
     if (possibleSuffix.isEmpty())
-        return fullPath.lastIndexOfChar ('.') <= fullPath.lastIndexOfChar (getSeparatorChar());
+        return fullPath.lastIndexOfChar ('.') <= fullPath.lastIndexOfChar (separator);
 
-    auto semicolon = possibleSuffix.text.indexOf ((juce_wchar) ';');
+    const int semicolon = possibleSuffix.text.indexOf ((juce_wchar) ';');
 
     if (semicolon >= 0)
         return hasFileExtension (String (possibleSuffix.text).substring (0, semicolon).trimEnd())
@@ -672,10 +688,10 @@ bool File::hasFileExtension (StringRef possibleSuffix) const
         if (possibleSuffix.text[0] == '.')
             return true;
 
-        auto dotPos = fullPath.length() - possibleSuffix.length() - 1;
+        const int dotPos = fullPath.length() - possibleSuffix.length() - 1;
 
         if (dotPos >= 0)
-            return fullPath[dotPos] == '.';
+            return fullPath [dotPos] == '.';
     }
 
     return false;
@@ -684,14 +700,13 @@ bool File::hasFileExtension (StringRef possibleSuffix) const
 File File::withFileExtension (StringRef newExtension) const
 {
     if (fullPath.isEmpty())
-        return {};
+        return File();
 
-    auto filePart = getFileName();
+    String filePart (getFileName());
 
-    auto lastDot = filePart.lastIndexOfChar ('.');
-
-    if (lastDot >= 0)
-        filePart = filePart.substring (0, lastDot);
+    const int i = filePart.lastIndexOfChar ('.');
+    if (i >= 0)
+        filePart = filePart.substring (0, i);
 
     if (newExtension.isNotEmpty() && newExtension.text[0] != '.')
         filePart << '.';
@@ -708,7 +723,7 @@ bool File::startAsProcess (const String& parameters) const
 //==============================================================================
 FileInputStream* File::createInputStream() const
 {
-    std::unique_ptr<FileInputStream> fin (new FileInputStream (*this));
+    ScopedPointer<FileInputStream> fin (new FileInputStream (*this));
 
     if (fin->openedOk())
         return fin.release();
@@ -716,9 +731,9 @@ FileInputStream* File::createInputStream() const
     return nullptr;
 }
 
-FileOutputStream* File::createOutputStream (size_t bufferSize) const
+FileOutputStream* File::createOutputStream (const size_t bufferSize) const
 {
-    std::unique_ptr<FileOutputStream> out (new FileOutputStream (*this, bufferSize));
+    ScopedPointer<FileOutputStream> out (new FileOutputStream (*this, bufferSize));
 
     return out->failedToOpen() ? nullptr
                                : out.release();
@@ -748,20 +763,25 @@ bool File::replaceWithData (const void* const dataToWrite,
     return tempFile.overwriteTargetFileWithTemporary();
 }
 
-bool File::appendText (const String& text, bool asUnicode, bool writeHeaderBytes, const char* lineFeed) const
+bool File::appendText (const String& text,
+                       const bool asUnicode,
+                       const bool writeUnicodeHeaderBytes) const
 {
     FileOutputStream out (*this);
 
     if (out.failedToOpen())
         return false;
 
-    return out.writeText (text, asUnicode, writeHeaderBytes, lineFeed);
+    out.writeText (text, asUnicode, writeUnicodeHeaderBytes);
+    return true;
 }
 
-bool File::replaceWithText (const String& textToWrite, bool asUnicode, bool writeHeaderBytes, const char* lineFeed) const
+bool File::replaceWithText (const String& textToWrite,
+                            const bool asUnicode,
+                            const bool writeUnicodeHeaderBytes) const
 {
     TemporaryFile tempFile (*this, TemporaryFile::useHiddenFile);
-    tempFile.getFile().appendText (textToWrite, asUnicode, writeHeaderBytes, lineFeed);
+    tempFile.getFile().appendText (textToWrite, asUnicode, writeUnicodeHeaderBytes);
     return tempFile.overwriteTargetFileWithTemporary();
 }
 
@@ -781,8 +801,8 @@ bool File::hasIdenticalContentTo (const File& other) const
 
             for (;;)
             {
-                auto num1 = in1.read (buffer1, bufferSize);
-                auto num2 = in2.read (buffer2, bufferSize);
+                const int num1 = in1.read (buffer1, bufferSize);
+                const int num2 = in2.read (buffer2, bufferSize);
 
                 if (num1 != num2)
                     break;
@@ -802,7 +822,7 @@ bool File::hasIdenticalContentTo (const File& other) const
 //==============================================================================
 String File::createLegalPathName (const String& original)
 {
-    auto s = original;
+    String s (original);
     String start;
 
     if (s.isNotEmpty() && s[1] == ':')
@@ -817,14 +837,14 @@ String File::createLegalPathName (const String& original)
 
 String File::createLegalFileName (const String& original)
 {
-    auto s = original.removeCharacters ("\"#@,;:<>*^|?\\/");
+    String s (original.removeCharacters ("\"#@,;:<>*^|?\\/"));
 
     const int maxLength = 128; // only the length of the filename, not the whole path
-    auto len = s.length();
+    const int len = s.length();
 
     if (len > maxLength)
     {
-        auto lastDot = s.lastIndexOfChar ('.');
+        const int lastDot = s.lastIndexOfChar ('.');
 
         if (lastDot > jmax (0, len - 12))
         {
@@ -847,43 +867,40 @@ static int countNumberOfSeparators (String::CharPointerType s)
 
     for (;;)
     {
-        auto c = s.getAndAdvance();
+        const juce_wchar c = s.getAndAdvance();
 
         if (c == 0)
             break;
 
-        if (c == File::getSeparatorChar())
+        if (c == File::separator)
             ++num;
     }
 
     return num;
 }
 
-String File::getRelativePathFrom (const File& dir) const
+String File::getRelativePathFrom (const File& dir)  const
 {
-    if (dir == *this)
-        return ".";
+    String thisPath (fullPath);
 
-    auto thisPath = fullPath;
-
-    while (thisPath.endsWithChar (getSeparatorChar()))
+    while (thisPath.endsWithChar (separator))
         thisPath = thisPath.dropLastCharacters (1);
 
-    auto dirPath = addTrailingSeparator (dir.existsAsFile() ? dir.getParentDirectory().getFullPathName()
-                                                            : dir.fullPath);
+    String dirPath (addTrailingSeparator (dir.existsAsFile() ? dir.getParentDirectory().getFullPathName()
+                                                             : dir.fullPath));
 
     int commonBitLength = 0;
-    auto thisPathAfterCommon = thisPath.getCharPointer();
-    auto dirPathAfterCommon  = dirPath.getCharPointer();
+    String::CharPointerType thisPathAfterCommon (thisPath.getCharPointer());
+    String::CharPointerType dirPathAfterCommon  (dirPath.getCharPointer());
 
     {
-        auto thisPathIter = thisPath.getCharPointer();
-        auto dirPathIter = dirPath.getCharPointer();
+        String::CharPointerType thisPathIter (thisPath.getCharPointer());
+        String::CharPointerType dirPathIter  (dirPath.getCharPointer());
 
         for (int i = 0;;)
         {
-            auto c1 = thisPathIter.getAndAdvance();
-            auto c2 = dirPathIter.getAndAdvance();
+            const juce_wchar c1 = thisPathIter.getAndAdvance();
+            const juce_wchar c2 = dirPathIter.getAndAdvance();
 
            #if NAMES_ARE_CASE_SENSITIVE
             if (c1 != c2
@@ -895,7 +912,7 @@ String File::getRelativePathFrom (const File& dir) const
 
             ++i;
 
-            if (c1 == getSeparatorChar())
+            if (c1 == separator)
             {
                 thisPathAfterCommon = thisPathIter;
                 dirPathAfterCommon  = dirPathIter;
@@ -905,18 +922,18 @@ String File::getRelativePathFrom (const File& dir) const
     }
 
     // if the only common bit is the root, then just return the full path..
-    if (commonBitLength == 0 || (commonBitLength == 1 && thisPath[1] == getSeparatorChar()))
+    if (commonBitLength == 0 || (commonBitLength == 1 && thisPath[1] == separator))
         return fullPath;
 
-    auto numUpDirectoriesNeeded = countNumberOfSeparators (dirPathAfterCommon);
+    const int numUpDirectoriesNeeded = countNumberOfSeparators (dirPathAfterCommon);
 
     if (numUpDirectoriesNeeded == 0)
         return thisPathAfterCommon;
 
    #if JUCE_WINDOWS
-    auto s = String::repeatedString ("..\\", numUpDirectoriesNeeded);
+    String s (String::repeatedString ("..\\", numUpDirectoriesNeeded));
    #else
-    auto s = String::repeatedString ("../",  numUpDirectoriesNeeded);
+    String s (String::repeatedString ("../",  numUpDirectoriesNeeded));
    #endif
     s.appendCharPointer (thisPathAfterCommon);
     return s;
@@ -925,9 +942,9 @@ String File::getRelativePathFrom (const File& dir) const
 //==============================================================================
 File File::createTempFile (StringRef fileNameEnding)
 {
-    auto tempFile = getSpecialLocation (tempDirectory)
-                      .getChildFile ("temp_" + String::toHexString (Random::getSystemRandom().nextInt()))
-                      .withFileExtension (fileNameEnding);
+    const File tempFile (getSpecialLocation (tempDirectory)
+                            .getChildFile ("temp_" + String::toHexString (Random::getSystemRandom().nextInt()))
+                            .withFileExtension (fileNameEnding));
 
     if (tempFile.exists())
         return createTempFile (fileNameEnding);
@@ -935,9 +952,7 @@ File File::createTempFile (StringRef fileNameEnding)
     return tempFile;
 }
 
-bool File::createSymbolicLink (const File& linkFileToCreate,
-                               const String& nativePathOfTarget,
-                               bool overwriteExisting)
+bool File::createSymbolicLink (const File& linkFileToCreate, bool overwriteExisting) const
 {
     if (linkFileToCreate.exists())
     {
@@ -955,7 +970,7 @@ bool File::createSymbolicLink (const File& linkFileToCreate,
 
    #if JUCE_MAC || JUCE_LINUX
     // one common reason for getting an error here is that the file already exists
-    if (symlink (nativePathOfTarget.toRawUTF8(), linkFileToCreate.getFullPathName().toRawUTF8()) == -1)
+    if (symlink (fullPath.toRawUTF8(), linkFileToCreate.getFullPathName().toRawUTF8()) == -1)
     {
         jassertfalse;
         return false;
@@ -963,42 +978,24 @@ bool File::createSymbolicLink (const File& linkFileToCreate,
 
     return true;
    #elif JUCE_MSVC
-    File targetFile (linkFileToCreate.getSiblingFile (nativePathOfTarget));
-
     return CreateSymbolicLink (linkFileToCreate.getFullPathName().toWideCharPointer(),
-                               nativePathOfTarget.toWideCharPointer(),
-                               targetFile.isDirectory() ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0) != FALSE;
+                               fullPath.toWideCharPointer(),
+                               isDirectory() ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0) != FALSE;
    #else
-    ignoreUnused (nativePathOfTarget);
     jassertfalse; // symbolic links not supported on this platform!
     return false;
    #endif
 }
 
-bool File::createSymbolicLink (const File& linkFileToCreate, bool overwriteExisting) const
-{
-    return createSymbolicLink (linkFileToCreate, getFullPathName(), overwriteExisting);
-}
-
-#if ! JUCE_WINDOWS
-File File::getLinkedTarget() const
-{
-    if (isSymbolicLink())
-        return getSiblingFile (getNativeLinkedTarget());
-
-    return *this;
-}
-#endif
-
 //==============================================================================
 MemoryMappedFile::MemoryMappedFile (const File& file, MemoryMappedFile::AccessMode mode, bool exclusive)
-    : range (0, file.getSize())
+    : address (nullptr), range (0, file.getSize()), fileHandle (0)
 {
     openInternal (file, mode, exclusive);
 }
 
 MemoryMappedFile::MemoryMappedFile (const File& file, const Range<int64>& fileRange, AccessMode mode, bool exclusive)
-    : range (fileRange.getIntersectionWith (Range<int64> (0, file.getSize())))
+    : address (nullptr), range (fileRange.getIntersectionWith (Range<int64> (0, file.getSize()))), fileHandle (0)
 {
     openInternal (file, mode, exclusive);
 }
@@ -1010,7 +1007,7 @@ MemoryMappedFile::MemoryMappedFile (const File& file, const Range<int64>& fileRa
 class FileTests  : public UnitTest
 {
 public:
-    FileTests() : UnitTest ("Files", "Files") {}
+    FileTests() : UnitTest ("Files") {}
 
     void runTest() override
     {
@@ -1058,14 +1055,24 @@ public:
 
         beginTest ("Writing");
 
-        File demoFolder (temp.getChildFile ("JUCE UnitTests Temp Folder.folder"));
+        File demoFolder (temp.getChildFile ("Juce UnitTests Temp Folder.folder"));
         expect (demoFolder.deleteRecursively());
         expect (demoFolder.createDirectory());
         expect (demoFolder.isDirectory());
         expect (demoFolder.getParentDirectory() == temp);
         expect (temp.isDirectory());
-        expect (temp.findChildFiles (File::findFilesAndDirectories, false, "*").contains (demoFolder));
-        expect (temp.findChildFiles (File::findDirectories, true, "*.folder").contains (demoFolder));
+
+        {
+            Array<File> files;
+            temp.findChildFiles (files, File::findFilesAndDirectories, false, "*");
+            expect (files.contains (demoFolder));
+        }
+
+        {
+            Array<File> files;
+            temp.findChildFiles (files, File::findDirectories, true, "*.folder");
+            expect (files.contains (demoFolder));
+        }
 
         File tempFile (demoFolder.getNonexistentChildFile ("test", ".txt", false));
 
@@ -1103,8 +1110,8 @@ public:
         expectEquals (tempFile.loadFileAsString(), String ("0123456789"));
         expect (! demoFolder.containsSubDirectories());
 
-        expectEquals (tempFile.getRelativePathFrom (demoFolder.getParentDirectory()), demoFolder.getFileName() + File::getSeparatorString() + tempFile.getFileName());
-        expectEquals (demoFolder.getParentDirectory().getRelativePathFrom (tempFile), ".." + File::getSeparatorString() + ".." + File::getSeparatorString() + demoFolder.getParentDirectory().getFileName());
+        expectEquals (tempFile.getRelativePathFrom (demoFolder.getParentDirectory()), demoFolder.getFileName() + File::separatorString + tempFile.getFileName());
+        expectEquals (demoFolder.getParentDirectory().getRelativePathFrom (tempFile), ".." + File::separatorString + ".." + File::separatorString + demoFolder.getParentDirectory().getFileName());
 
         expect (demoFolder.getNumberOfChildFiles (File::findFiles) == 1);
         expect (demoFolder.getNumberOfChildFiles (File::findFilesAndDirectories) == 1);
@@ -1201,5 +1208,3 @@ public:
 static FileTests fileUnitTests;
 
 #endif
-
-} // namespace juce

@@ -2,28 +2,34 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
-
-StringPairArray::StringPairArray (bool shouldIgnoreCase)  : ignoreCase (shouldIgnoreCase)
+StringPairArray::StringPairArray (const bool ignoreCase_)
+    : ignoreCase (ignoreCase_)
 {
 }
 
@@ -47,32 +53,9 @@ StringPairArray& StringPairArray::operator= (const StringPairArray& other)
 
 bool StringPairArray::operator== (const StringPairArray& other) const
 {
-    auto num = size();
-
-    if (num != other.size())
-        return false;
-
-    for (int i = 0; i < num; ++i)
-    {
-        if (keys[i] == other.keys[i]) // optimise for the case where the keys are in the same order
-        {
-            if (values[i] != other.values[i])
-                return false;
-        }
-        else
-        {
-            // if we encounter keys that are in a different order, search remaining items by brute force..
-            for (int j = i; j < num; ++j)
-            {
-                auto otherIndex = other.keys.indexOf (keys[j], other.ignoreCase);
-
-                if (otherIndex < 0 || values[j] != other.values[otherIndex])
-                    return false;
-            }
-
-            return true;
-        }
-    }
+    for (int i = keys.size(); --i >= 0;)
+        if (other [keys[i]] != values[i])
+            return false;
 
     return true;
 }
@@ -84,12 +67,12 @@ bool StringPairArray::operator!= (const StringPairArray& other) const
 
 const String& StringPairArray::operator[] (StringRef key) const
 {
-    return values[keys.indexOf (key, ignoreCase)];
+    return values [keys.indexOf (key, ignoreCase)];
 }
 
 String StringPairArray::getValue (StringRef key, const String& defaultReturnValue) const
 {
-    auto i = keys.indexOf (key, ignoreCase);
+    const int i = keys.indexOf (key, ignoreCase);
 
     if (i >= 0)
         return values[i];
@@ -104,7 +87,7 @@ bool StringPairArray::containsKey (StringRef key) const noexcept
 
 void StringPairArray::set (const String& key, const String& value)
 {
-    auto i = keys.indexOf (key, ignoreCase);
+    const int i = keys.indexOf (key, ignoreCase);
 
     if (i >= 0)
     {
@@ -134,13 +117,13 @@ void StringPairArray::remove (StringRef key)
     remove (keys.indexOf (key, ignoreCase));
 }
 
-void StringPairArray::remove (int index)
+void StringPairArray::remove (const int index)
 {
     keys.remove (index);
     values.remove (index);
 }
 
-void StringPairArray::setIgnoresCase (bool shouldIgnoreCase)
+void StringPairArray::setIgnoresCase (const bool shouldIgnoreCase)
 {
     ignoreCase = shouldIgnoreCase;
 }
@@ -152,7 +135,6 @@ String StringPairArray::getDescription() const
     for (int i = 0; i < keys.size(); ++i)
     {
         s << keys[i] << " = " << values[i];
-
         if (i < keys.size())
             s << ", ";
     }
@@ -165,5 +147,3 @@ void StringPairArray::minimiseStorageOverheads()
     keys.minimiseStorageOverheads();
     values.minimiseStorageOverheads();
 }
-
-} // namespace juce

@@ -2,40 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of either:
+   a) the GPL v2 (or any later version)
+   b) the Affero GPL v3
 
-   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
-   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
-   27th April 2017).
+   Details of these licenses can be found at: www.gnu.org/licenses
 
-   End User License Agreement: www.juce.com/juce-5-licence
-   Privacy Policy: www.juce.com/juce-5-privacy-policy
+   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-   Or: You may also use this code under the terms of the GPL v3 (see
-   www.gnu.org/licenses).
+   ------------------------------------------------------------------------------
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   To release a closed-source product which uses JUCE, commercial licenses are
+   available: visit www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
-
 namespace PropertyFileConstants
 {
-    JUCE_CONSTEXPR static const int magicNumber            = (int) ByteOrder::makeInt ('P', 'R', 'O', 'P');
-    JUCE_CONSTEXPR static const int magicNumberCompressed  = (int) ByteOrder::makeInt ('C', 'P', 'R', 'P');
+    static const int magicNumber            = (int) ByteOrder::littleEndianInt ("PROP");
+    static const int magicNumberCompressed  = (int) ByteOrder::littleEndianInt ("CPRP");
 
-    JUCE_CONSTEXPR static const char* const fileTag        = "PROPERTIES";
-    JUCE_CONSTEXPR static const char* const valueTag       = "VALUE";
-    JUCE_CONSTEXPR static const char* const nameAttribute  = "name";
-    JUCE_CONSTEXPR static const char* const valueAttribute = "val";
+    static const char* const fileTag        = "PROPERTIES";
+    static const char* const valueTag       = "VALUE";
+    static const char* const nameAttribute  = "name";
+    static const char* const valueAttribute = "val";
 }
 
 //==============================================================================
@@ -88,16 +83,16 @@ File PropertiesFile::Options::getDefaultFile() const
         dir = dir.getChildFile (folderName);
 
    #elif JUCE_LINUX || JUCE_ANDROID
-    auto dir = File (commonToAllUsers ? "/var" : "~")
-                      .getChildFile (folderName.isNotEmpty() ? folderName
-                                                             : ("." + applicationName));
+    const File dir (File (commonToAllUsers ? "/var" : "~")
+                     .getChildFile (folderName.isNotEmpty() ? folderName
+                                                            : ("." + applicationName)));
 
    #elif JUCE_WINDOWS
-    auto dir = File::getSpecialLocation (commonToAllUsers ? File::commonApplicationDataDirectory
-                                                          : File::userApplicationDataDirectory);
+    File dir (File::getSpecialLocation (commonToAllUsers ? File::commonApplicationDataDirectory
+                                                         : File::userApplicationDataDirectory));
 
     if (dir == File())
-        return {};
+        return File();
 
     dir = dir.getChildFile (folderName.isNotEmpty() ? folderName
                                                     : applicationName);
@@ -112,14 +107,16 @@ File PropertiesFile::Options::getDefaultFile() const
 //==============================================================================
 PropertiesFile::PropertiesFile (const File& f, const Options& o)
     : PropertySet (o.ignoreCaseOfKeyNames),
-      file (f), options (o)
+      file (f), options (o),
+      loadedOk (false), needsWriting (false)
 {
     reload();
 }
 
 PropertiesFile::PropertiesFile (const Options& o)
     : PropertySet (o.ignoreCaseOfKeyNames),
-      file (o.getDefaultFile()), options (o)
+      file (o.getDefaultFile()), options (o),
+      loadedOk (false), needsWriting (false)
 {
     reload();
 }
@@ -184,23 +181,25 @@ bool PropertiesFile::save()
 bool PropertiesFile::loadAsXml()
 {
     XmlDocument parser (file);
-    std::unique_ptr<XmlElement> doc (parser.getDocumentElement (true));
+    ScopedPointer<XmlElement> doc (parser.getDocumentElement (true));
 
     if (doc != nullptr && doc->hasTagName (PropertyFileConstants::fileTag))
     {
-        doc.reset (parser.getDocumentElement());
+        doc = parser.getDocumentElement();
 
         if (doc != nullptr)
         {
             forEachXmlChildElementWithTagName (*doc, e, PropertyFileConstants::valueTag)
             {
-                auto name = e->getStringAttribute (PropertyFileConstants::nameAttribute);
+                const String name (e->getStringAttribute (PropertyFileConstants::nameAttribute));
 
                 if (name.isNotEmpty())
+                {
                     getAllProperties().set (name,
                                             e->getFirstChildElement() != nullptr
                                                 ? e->getFirstChildElement()->createDocument ("", true)
                                                 : e->getStringAttribute (PropertyFileConstants::valueAttribute));
+                }
             }
 
             return true;
@@ -218,15 +217,15 @@ bool PropertiesFile::loadAsXml()
 bool PropertiesFile::saveAsXml()
 {
     XmlElement doc (PropertyFileConstants::fileTag);
-    auto& props = getAllProperties();
+    const StringPairArray& props = getAllProperties();
 
     for (int i = 0; i < props.size(); ++i)
     {
-        auto* e = doc.createNewChildElement (PropertyFileConstants::valueTag);
+        XmlElement* const e = doc.createNewChildElement (PropertyFileConstants::valueTag);
         e->setAttribute (PropertyFileConstants::nameAttribute, props.getAllKeys() [i]);
 
         // if the value seems to contain xml, store it as such..
-        if (auto* childElement = XmlDocument::parse (props.getAllValues() [i]))
+        if (XmlElement* const childElement = XmlDocument::parse (props.getAllValues() [i]))
             e->addChildElement (childElement);
         else
             e->setAttribute (PropertyFileConstants::valueAttribute, props.getAllValues() [i]);
@@ -237,7 +236,7 @@ bool PropertiesFile::saveAsXml()
     if (pl != nullptr && ! pl->isLocked())
         return false; // locking failure..
 
-    if (doc.writeToFile (file, {}))
+    if (doc.writeToFile (file, String()))
     {
         needsWriting = false;
         return true;
@@ -252,7 +251,7 @@ bool PropertiesFile::loadAsBinary()
 
     if (fileStream.openedOk())
     {
-        auto magicNumber = fileStream.readInt();
+        const int magicNumber = fileStream.readInt();
 
         if (magicNumber == PropertyFileConstants::magicNumberCompressed)
         {
@@ -276,10 +275,10 @@ bool PropertiesFile::loadAsBinary (InputStream& input)
 
     while (--numValues >= 0 && ! in.isExhausted())
     {
-        auto key = in.readString();
-        auto value = in.readString();
-        jassert (key.isNotEmpty());
+        const String key (in.readString());
+        const String value (in.readString());
 
+        jassert (key.isNotEmpty());
         if (key.isNotEmpty())
             getAllProperties().set (key, value);
     }
@@ -295,59 +294,48 @@ bool PropertiesFile::saveAsBinary()
         return false; // locking failure..
 
     TemporaryFile tempFile (file);
+    ScopedPointer<OutputStream> out (tempFile.getFile().createOutputStream());
 
+    if (out != nullptr)
     {
-        FileOutputStream out (tempFile.getFile());
-
-        if (! out.openedOk())
-            return false;
-
         if (options.storageFormat == storeAsCompressedBinary)
         {
-            out.writeInt (PropertyFileConstants::magicNumberCompressed);
-            out.flush();
+            out->writeInt (PropertyFileConstants::magicNumberCompressed);
+            out->flush();
 
-            GZIPCompressorOutputStream zipped (out, 9);
-
-            if (! writeToStream (zipped))
-                return false;
+            out = new GZIPCompressorOutputStream (out.release(), 9, true);
         }
         else
         {
             // have you set up the storage option flags correctly?
             jassert (options.storageFormat == storeAsBinary);
 
-            out.writeInt (PropertyFileConstants::magicNumber);
+            out->writeInt (PropertyFileConstants::magicNumber);
+        }
 
-            if (! writeToStream (out))
-                return false;
+        const StringPairArray& props = getAllProperties();
+        const int numProperties   = props.size();
+        const StringArray& keys   = props.getAllKeys();
+        const StringArray& values = props.getAllValues();
+
+        out->writeInt (numProperties);
+
+        for (int i = 0; i < numProperties; ++i)
+        {
+            out->writeString (keys[i]);
+            out->writeString (values[i]);
+        }
+
+        out = nullptr;
+
+        if (tempFile.overwriteTargetFileWithTemporary())
+        {
+            needsWriting = false;
+            return true;
         }
     }
 
-    if (! tempFile.overwriteTargetFileWithTemporary())
-        return false;
-
-    needsWriting = false;
-    return true;
-}
-
-bool PropertiesFile::writeToStream (OutputStream& out)
-{
-    auto& props  = getAllProperties();
-    auto& keys   = props.getAllKeys();
-    auto& values = props.getAllValues();
-    auto numProperties = props.size();
-
-    if (! out.writeInt (numProperties))
-        return false;
-
-    for (int i = 0; i < numProperties; ++i)
-    {
-        if (! out.writeString (keys[i]))   return false;
-        if (! out.writeString (values[i])) return false;
-    }
-
-    return true;
+    return false;
 }
 
 void PropertiesFile::timerCallback()
@@ -358,6 +346,7 @@ void PropertiesFile::timerCallback()
 void PropertiesFile::propertyChanged()
 {
     sendChangeMessage();
+
     needsWriting = true;
 
     if (options.millisecondsBeforeSaving > 0)
@@ -365,5 +354,3 @@ void PropertiesFile::propertyChanged()
     else if (options.millisecondsBeforeSaving == 0)
         saveIfNeeded();
 }
-
-} // namespace juce

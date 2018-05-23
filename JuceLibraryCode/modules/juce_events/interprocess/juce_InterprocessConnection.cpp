@@ -2,42 +2,53 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
-
 struct InterprocessConnection::ConnectionThread  : public Thread
 {
     ConnectionThread (InterprocessConnection& c)  : Thread ("JUCE IPC"), owner (c) {}
+
     void run() override     { owner.runThread(); }
 
+private:
     InterprocessConnection& owner;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionThread)
 };
 
 //==============================================================================
-InterprocessConnection::InterprocessConnection (bool callbacksOnMessageThread, uint32 magicMessageHeaderNumber)
-    : useMessageThread (callbacksOnMessageThread),
-      magicMessageHeader (magicMessageHeaderNumber)
+InterprocessConnection::InterprocessConnection (const bool callbacksOnMessageThread,
+                                                const uint32 magicMessageHeaderNumber)
+    : callbackConnectionState (false),
+      useMessageThread (callbacksOnMessageThread),
+      magicMessageHeader (magicMessageHeaderNumber),
+      pipeReceiveMessageTimeout (-1)
 {
-    thread.reset (new ConnectionThread (*this));
+    thread = new ConnectionThread (*this);
 }
 
 InterprocessConnection::~InterprocessConnection()
@@ -45,17 +56,18 @@ InterprocessConnection::~InterprocessConnection()
     callbackConnectionState = false;
     disconnect();
     masterReference.clear();
-    thread.reset();
+    thread = nullptr;
 }
 
 //==============================================================================
 bool InterprocessConnection::connectToSocket (const String& hostName,
-                                              int portNumber, int timeOutMillisecs)
+                                              const int portNumber,
+                                              const int timeOutMillisecs)
 {
     disconnect();
 
     const ScopedLock sl (pipeAndSocketLock);
-    socket.reset (new StreamingSocket());
+    socket = new StreamingSocket();
 
     if (socket->connect (hostName, portNumber, timeOutMillisecs))
     {
@@ -64,15 +76,15 @@ bool InterprocessConnection::connectToSocket (const String& hostName,
         return true;
     }
 
-    socket.reset();
+    socket = nullptr;
     return false;
 }
 
-bool InterprocessConnection::connectToPipe (const String& pipeName, int timeoutMs)
+bool InterprocessConnection::connectToPipe (const String& pipeName, const int timeoutMs)
 {
     disconnect();
 
-    std::unique_ptr<NamedPipe> newPipe (new NamedPipe());
+    ScopedPointer<NamedPipe> newPipe (new NamedPipe());
 
     if (newPipe->openExisting (pipeName))
     {
@@ -85,11 +97,11 @@ bool InterprocessConnection::connectToPipe (const String& pipeName, int timeoutM
     return false;
 }
 
-bool InterprocessConnection::createPipe (const String& pipeName, int timeoutMs, bool mustNotExist)
+bool InterprocessConnection::createPipe (const String& pipeName, const int timeoutMs, bool mustNotExist)
 {
     disconnect();
 
-    std::unique_ptr<NamedPipe> newPipe (new NamedPipe());
+    ScopedPointer<NamedPipe> newPipe (new NamedPipe());
 
     if (newPipe->createNewPipe (pipeName, mustNotExist))
     {
@@ -120,8 +132,8 @@ void InterprocessConnection::disconnect()
 void InterprocessConnection::deletePipeAndSocket()
 {
     const ScopedLock sl (pipeAndSocketLock);
-    socket.reset();
-    pipe.reset();
+    socket = nullptr;
+    pipe = nullptr;
 }
 
 bool InterprocessConnection::isConnected() const
@@ -139,7 +151,7 @@ String InterprocessConnection::getConnectedHostName() const
         const ScopedLock sl (pipeAndSocketLock);
 
         if (pipe == nullptr && socket == nullptr)
-            return {};
+            return String();
 
         if (socket != nullptr && ! socket->isLocal())
             return socket->getHostName();
@@ -178,7 +190,7 @@ int InterprocessConnection::writeData (void* data, int dataSize)
 void InterprocessConnection::initialiseWithSocket (StreamingSocket* newSocket)
 {
     jassert (socket == nullptr && pipe == nullptr);
-    socket.reset (newSocket);
+    socket = newSocket;
     connectionMadeInt();
     thread->startThread();
 }
@@ -186,7 +198,7 @@ void InterprocessConnection::initialiseWithSocket (StreamingSocket* newSocket)
 void InterprocessConnection::initialiseWithPipe (NamedPipe* newPipe)
 {
     jassert (socket == nullptr && pipe == nullptr);
-    pipe.reset (newPipe);
+    pipe = newPipe;
     connectionMadeInt();
     thread->startThread();
 }
@@ -200,7 +212,7 @@ struct ConnectionStateMessage  : public MessageManager::MessageBase
 
     void messageCallback() override
     {
-        if (auto* ipc = owner.get())
+        if (InterprocessConnection* const ipc = owner)
         {
             if (connectionMade)
                 ipc->connectionMade();
@@ -249,7 +261,7 @@ struct DataDeliveryMessage  : public Message
 
     void messageCallback() override
     {
-        if (auto* ipc = owner.get())
+        if (InterprocessConnection* const ipc = owner)
             ipc->messageReceived (data);
     }
 
@@ -268,27 +280,16 @@ void InterprocessConnection::deliverDataInt (const MemoryBlock& data)
 }
 
 //==============================================================================
-int InterprocessConnection::readData (void* data, int num)
-{
-    if (socket != nullptr)
-        return socket->read (data, num, true);
-
-    if (pipe != nullptr)
-        return pipe->read (data, num, pipeReceiveMessageTimeout);
-
-    jassertfalse;
-    return -1;
-}
-
-bool InterprocessConnection::readNextMessage()
+bool InterprocessConnection::readNextMessageInt()
 {
     uint32 messageHeader[2];
-    auto bytes = readData (messageHeader, sizeof (messageHeader));
+    const int bytes = socket != nullptr ? socket->read (messageHeader, sizeof (messageHeader), true)
+                                        : pipe  ->read (messageHeader, sizeof (messageHeader), -1);
 
     if (bytes == sizeof (messageHeader)
          && ByteOrder::swapIfBigEndian (messageHeader[0]) == magicMessageHeader)
     {
-        auto bytesInMessage = (int) ByteOrder::swapIfBigEndian (messageHeader[1]);
+        int bytesInMessage = (int) ByteOrder::swapIfBigEndian (messageHeader[1]);
 
         if (bytesInMessage > 0)
         {
@@ -300,8 +301,11 @@ bool InterprocessConnection::readNextMessage()
                 if (thread->threadShouldExit())
                     return false;
 
-                auto numThisTime = jmin (bytesInMessage, 65536);
-                auto bytesIn = readData (addBytesToPointer (messageData.getData(), bytesRead), numThisTime);
+                const int numThisTime = jmin (bytesInMessage, 65536);
+                void* const data = addBytesToPointer (messageData.getData(), bytesRead);
+
+                const int bytesIn = socket != nullptr ? socket->read (data, numThisTime, true)
+                                                      : pipe  ->read (data, numThisTime, -1);
 
                 if (bytesIn <= 0)
                     break;
@@ -313,19 +317,17 @@ bool InterprocessConnection::readNextMessage()
             if (bytesRead >= 0)
                 deliverDataInt (messageData);
         }
-
-        return true;
     }
-
-    if (bytes < 0)
+    else if (bytes < 0)
     {
         if (socket != nullptr)
             deletePipeAndSocket();
 
         connectionLostInt();
+        return false;
     }
 
-    return false;
+    return true;
 }
 
 void InterprocessConnection::runThread()
@@ -334,7 +336,7 @@ void InterprocessConnection::runThread()
     {
         if (socket != nullptr)
         {
-            auto ready = socket->waitUntilReady (true, 100);
+            const int ready = socket->waitUntilReady (true, 0);
 
             if (ready < 0)
             {
@@ -363,9 +365,7 @@ void InterprocessConnection::runThread()
             break;
         }
 
-        if (thread->threadShouldExit() || ! readNextMessage())
+        if (thread->threadShouldExit() || ! readNextMessageInt())
             break;
     }
 }
-
-} // namespace juce

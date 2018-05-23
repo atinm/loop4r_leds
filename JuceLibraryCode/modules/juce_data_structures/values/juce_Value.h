@@ -2,30 +2,29 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of either:
+   a) the GPL v2 (or any later version)
+   b) the Affero GPL v3
 
-   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
-   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
-   27th April 2017).
+   Details of these licenses can be found at: www.gnu.org/licenses
 
-   End User License Agreement: www.juce.com/juce-5-licence
-   Privacy Policy: www.juce.com/juce-5-privacy-policy
+   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-   Or: You may also use this code under the terms of the GPL v3 (see
-   www.gnu.org/licenses).
+   ------------------------------------------------------------------------------
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   To release a closed-source product which uses JUCE, commercial licenses are
+   available: visit www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_VALUE_H_INCLUDED
+#define JUCE_VALUE_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -45,10 +44,8 @@ namespace juce
     Important note! The Value class is not thread-safe! If you're accessing one from
     multiple threads, then you'll need to use your own synchronisation around any code
     that accesses it.
-
-    @tags{DataStructures}
 */
-class JUCE_API  Value  final
+class JUCE_API  Value
 {
 public:
     //==============================================================================
@@ -66,8 +63,10 @@ public:
     /** Creates a Value that is set to the specified value. */
     explicit Value (const var& initialValue);
 
-    /** Move constructor */
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     Value (Value&&) noexcept;
+    Value& operator= (Value&&) noexcept;
+   #endif
 
     /** Destructor. */
     ~Value();
@@ -101,9 +100,6 @@ public:
         change asynchronously.
     */
     Value& operator= (const var& newValue);
-
-    /** Move assignment operator */
-    Value& operator= (Value&&) noexcept;
 
     /** Makes this object refer to the same underlying ValueSource as another one.
 
@@ -229,15 +225,17 @@ private:
 
     // This is disallowed to avoid confusion about whether it should
     // do a by-value or by-reference copy.
-    Value& operator= (const Value&) = delete;
+    Value& operator= (const Value&) JUCE_DELETED_FUNCTION;
 
     // This declaration prevents accidental construction from an integer of 0,
     // which is possible in some compilers via an implicit cast to a pointer.
-    explicit Value (void*) = delete;
+    explicit Value (void*) JUCE_DELETED_FUNCTION;
 };
 
 /** Writes a Value to an OutputStream as a UTF8 string. */
 OutputStream& JUCE_CALLTYPE operator<< (OutputStream&, const Value&);
 
+/** This typedef is just for compatibility with old code - newer code should use the Value::Listener class directly. */
+typedef Value::Listener ValueListener;
 
-} // namespace juce
+#endif   // JUCE_VALUE_H_INCLUDED

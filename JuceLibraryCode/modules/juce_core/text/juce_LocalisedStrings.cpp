@@ -2,26 +2,31 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
-
-namespace juce
-{
 
 LocalisedStrings::LocalisedStrings (const String& fileContents, bool ignoreCase)
 {
@@ -44,7 +49,7 @@ LocalisedStrings& LocalisedStrings::operator= (const LocalisedStrings& other)
     languageName = other.languageName;
     countryCodes = other.countryCodes;
     translations = other.translations;
-    fallback.reset (createCopyIfNotNull (other.fallback.get()));
+    fallback = createCopyIfNotNull (other.fallback.get());
     return *this;
 }
 
@@ -81,7 +86,7 @@ namespace
     {
         LeakAvoidanceTrick()
         {
-            const std::unique_ptr<LocalisedStrings> dummy (new LocalisedStrings (String(), false));
+            const ScopedPointer<LocalisedStrings> dummy (new LocalisedStrings (String(), false));
         }
     };
 
@@ -89,16 +94,16 @@ namespace
    #endif
 
     SpinLock currentMappingsLock;
-    std::unique_ptr<LocalisedStrings> currentMappings;
+    ScopedPointer<LocalisedStrings> currentMappings;
 
     static int findCloseQuote (const String& text, int startPos)
     {
         juce_wchar lastChar = 0;
-        auto t = text.getCharPointer() + startPos;
+        String::CharPointerType t (text.getCharPointer() + startPos);
 
         for (;;)
         {
-            auto c = t.getAndAdvance();
+            const juce_wchar c = t.getAndAdvance();
 
             if (c == 0 || (c == '"' && lastChar != '\\'))
                 break;
@@ -127,20 +132,22 @@ void LocalisedStrings::loadFromText (const String& fileContents, bool ignoreCase
     StringArray lines;
     lines.addLines (fileContents);
 
-    for (auto& l : lines)
+    for (int i = 0; i < lines.size(); ++i)
     {
-        auto line = l.trim();
+        String line (lines[i].trim());
 
         if (line.startsWithChar ('"'))
         {
-            auto closeQuote = findCloseQuote (line, 1);
-            auto originalText = unescapeString (line.substring (1, closeQuote));
+            int closeQuote = findCloseQuote (line, 1);
+
+            const String originalText (unescapeString (line.substring (1, closeQuote)));
 
             if (originalText.isNotEmpty())
             {
-                auto openingQuote = findCloseQuote (line, closeQuote + 1);
+                const int openingQuote = findCloseQuote (line, closeQuote + 1);
                 closeQuote = findCloseQuote (line, openingQuote + 1);
-                auto newText = unescapeString (line.substring (openingQuote + 1, closeQuote));
+
+                const String newText (unescapeString (line.substring (openingQuote + 1, closeQuote)));
 
                 if (newText.isNotEmpty())
                     translations.set (originalText, newText);
@@ -171,19 +178,19 @@ void LocalisedStrings::addStrings (const LocalisedStrings& other)
 
 void LocalisedStrings::setFallback (LocalisedStrings* f)
 {
-    fallback.reset (f);
+    fallback = f;
 }
 
 //==============================================================================
 void LocalisedStrings::setCurrentMappings (LocalisedStrings* newTranslations)
 {
     const SpinLock::ScopedLockType sl (currentMappingsLock);
-    currentMappings.reset (newTranslations);
+    currentMappings = newTranslations;
 }
 
 LocalisedStrings* LocalisedStrings::getCurrentMappings()
 {
-    return currentMappings.get();
+    return currentMappings;
 }
 
 String LocalisedStrings::translateWithCurrentMappings (const String& text)  { return juce::translate (text); }
@@ -197,10 +204,8 @@ JUCE_API String translate (const String& text, const String& resultIfNotFound)
 {
     const SpinLock::ScopedLockType sl (currentMappingsLock);
 
-    if (auto* mappings = LocalisedStrings::getCurrentMappings())
+    if (const LocalisedStrings* const mappings = LocalisedStrings::getCurrentMappings())
         return mappings->translate (text, resultIfNotFound);
 
     return resultIfNotFound;
 }
-
-} // namespace juce

@@ -2,26 +2,34 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_HEAPBLOCK_H_INCLUDED
+#define JUCE_HEAPBLOCK_H_INCLUDED
 
 #if ! (defined (DOXYGEN) || JUCE_EXCEPTIONS_DISABLED)
 namespace HeapBlockHelper
@@ -79,8 +87,6 @@ namespace HeapBlockHelper
     that the system's malloc() function doesn't throw).
 
     @see Array, OwnedArray, MemoryBlock
-
-    @tags{Core}
 */
 template <class ElementType, bool throwOnFailure = false>
 class HeapBlock
@@ -92,7 +98,7 @@ public:
         After creation, you can resize the array using the malloc(), calloc(),
         or realloc() methods.
     */
-    HeapBlock() noexcept
+    HeapBlock() noexcept  : data (nullptr)
     {
     }
 
@@ -104,9 +110,8 @@ public:
         If you want an array of zero values, you can use the calloc() method or the
         other constructor that takes an InitialisationState parameter.
     */
-    template <typename SizeType>
-    explicit HeapBlock (SizeType numElements)
-        : data (static_cast<ElementType*> (std::malloc (static_cast<size_t> (numElements) * sizeof (ElementType))))
+    explicit HeapBlock (const size_t numElements)
+        : data (static_cast<ElementType*> (std::malloc (numElements * sizeof (ElementType))))
     {
         throwOnAllocationFailure();
     }
@@ -116,11 +121,10 @@ public:
         The initialiseToZero parameter determines whether the new memory should be cleared,
         or left uninitialised.
     */
-    template <typename SizeType>
-    HeapBlock (SizeType numElements, bool initialiseToZero)
+    HeapBlock (const size_t numElements, const bool initialiseToZero)
         : data (static_cast<ElementType*> (initialiseToZero
-                                               ? std::calloc (static_cast<size_t> (numElements), sizeof (ElementType))
-                                               : std::malloc (static_cast<size_t> (numElements) * sizeof (ElementType))))
+                                               ? std::calloc (numElements, sizeof (ElementType))
+                                               : std::malloc (numElements * sizeof (ElementType))))
     {
         throwOnAllocationFailure();
     }
@@ -133,80 +137,74 @@ public:
         std::free (data);
     }
 
-    /** Move constructor */
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     HeapBlock (HeapBlock&& other) noexcept
         : data (other.data)
     {
         other.data = nullptr;
     }
 
-    /** Move assignment operator */
     HeapBlock& operator= (HeapBlock&& other) noexcept
     {
         std::swap (data, other.data);
         return *this;
     }
+   #endif
 
     //==============================================================================
     /** Returns a raw pointer to the allocated data.
         This may be a null pointer if the data hasn't yet been allocated, or if it has been
         freed by calling the free() method.
     */
-    inline operator ElementType*() const noexcept                            { return data; }
+    inline operator ElementType*() const noexcept                           { return data; }
 
     /** Returns a raw pointer to the allocated data.
         This may be a null pointer if the data hasn't yet been allocated, or if it has been
         freed by calling the free() method.
     */
-    inline ElementType* get() const noexcept                                 { return data; }
-
-    /** Returns a raw pointer to the allocated data.
-        This may be a null pointer if the data hasn't yet been allocated, or if it has been
-        freed by calling the free() method.
-    */
-    inline ElementType* getData() const noexcept                             { return data; }
+    inline ElementType* getData() const noexcept                            { return data; }
 
     /** Returns a void pointer to the allocated data.
         This may be a null pointer if the data hasn't yet been allocated, or if it has been
         freed by calling the free() method.
     */
-    inline operator void*() const noexcept                                   { return static_cast<void*> (data); }
+    inline operator void*() const noexcept                                  { return static_cast<void*> (data); }
 
     /** Returns a void pointer to the allocated data.
         This may be a null pointer if the data hasn't yet been allocated, or if it has been
         freed by calling the free() method.
     */
-    inline operator const void*() const noexcept                             { return static_cast<const void*> (data); }
+    inline operator const void*() const noexcept                            { return static_cast<const void*> (data); }
 
     /** Lets you use indirect calls to the first element in the array.
         Obviously this will cause problems if the array hasn't been initialised, because it'll
         be referencing a null pointer.
     */
-    inline ElementType* operator->() const  noexcept                         { return data; }
+    inline ElementType* operator->() const  noexcept                        { return data; }
 
     /** Returns a reference to one of the data elements.
         Obviously there's no bounds-checking here, as this object is just a dumb pointer and
         has no idea of the size it currently has allocated.
     */
     template <typename IndexType>
-    ElementType& operator[] (IndexType index) const noexcept                 { return data [index]; }
+    inline ElementType& operator[] (IndexType index) const noexcept         { return data [index]; }
 
     /** Returns a pointer to a data element at an offset from the start of the array.
         This is the same as doing pointer arithmetic on the raw pointer itself.
     */
     template <typename IndexType>
-    ElementType* operator+ (IndexType index) const noexcept                  { return data + index; }
+    inline ElementType* operator+ (IndexType index) const noexcept          { return data + index; }
 
     //==============================================================================
     /** Compares the pointer with another pointer.
         This can be handy for checking whether this is a null pointer.
     */
-    inline bool operator== (const ElementType* otherPointer) const noexcept  { return otherPointer == data; }
+    inline bool operator== (const ElementType* const otherPointer) const noexcept   { return otherPointer == data; }
 
     /** Compares the pointer with another pointer.
         This can be handy for checking whether this is a null pointer.
     */
-    inline bool operator!= (const ElementType* otherPointer) const noexcept  { return otherPointer != data; }
+    inline bool operator!= (const ElementType* const otherPointer) const noexcept   { return otherPointer != data; }
 
     //==============================================================================
     /** Allocates a specified amount of memory.
@@ -221,22 +219,20 @@ public:
         The data that is allocated will be freed when this object is deleted, or when you
         call free() or any of the allocation methods.
     */
-    template <typename SizeType>
-    void malloc (SizeType newNumElements, size_t elementSize = sizeof (ElementType))
+    void malloc (const size_t newNumElements, const size_t elementSize = sizeof (ElementType))
     {
         std::free (data);
-        data = static_cast<ElementType*> (std::malloc (static_cast<size_t> (newNumElements) * elementSize));
+        data = static_cast<ElementType*> (std::malloc (newNumElements * elementSize));
         throwOnAllocationFailure();
     }
 
     /** Allocates a specified amount of memory and clears it.
         This does the same job as the malloc() method, but clears the memory that it allocates.
     */
-    template <typename SizeType>
-    void calloc (SizeType newNumElements, const size_t elementSize = sizeof (ElementType))
+    void calloc (const size_t newNumElements, const size_t elementSize = sizeof (ElementType))
     {
         std::free (data);
-        data = static_cast<ElementType*> (std::calloc (static_cast<size_t> (newNumElements), elementSize));
+        data = static_cast<ElementType*> (std::calloc (newNumElements, elementSize));
         throwOnAllocationFailure();
     }
 
@@ -244,13 +240,12 @@ public:
         This does the same job as either malloc() or calloc(), depending on the
         initialiseToZero parameter.
     */
-    template <typename SizeType>
-    void allocate (SizeType newNumElements, bool initialiseToZero)
+    void allocate (const size_t newNumElements, bool initialiseToZero)
     {
         std::free (data);
         data = static_cast<ElementType*> (initialiseToZero
-                                             ? std::calloc (static_cast<size_t> (newNumElements), sizeof (ElementType))
-                                             : std::malloc (static_cast<size_t> (newNumElements) * sizeof (ElementType)));
+                                             ? std::calloc (newNumElements, sizeof (ElementType))
+                                             : std::malloc (newNumElements * sizeof (ElementType)));
         throwOnAllocationFailure();
     }
 
@@ -259,11 +254,10 @@ public:
         The semantics of this method are the same as malloc() and calloc(), but it
         uses realloc() to keep as much of the existing data as possible.
     */
-    template <typename SizeType>
-    void realloc (SizeType newNumElements, size_t elementSize = sizeof (ElementType))
+    void realloc (const size_t newNumElements, const size_t elementSize = sizeof (ElementType))
     {
-        data = static_cast<ElementType*> (data == nullptr ? std::malloc (static_cast<size_t> (newNumElements) * elementSize)
-                                                          : std::realloc (data, static_cast<size_t> (newNumElements) * elementSize));
+        data = static_cast<ElementType*> (data == nullptr ? std::malloc (newNumElements * elementSize)
+                                                          : std::realloc (data, newNumElements * elementSize));
         throwOnAllocationFailure();
     }
 
@@ -289,10 +283,9 @@ public:
         Since the block has no way of knowing its own size, you must make sure that the number of
         elements you specify doesn't exceed the allocated size.
     */
-    template <typename SizeType>
-    void clear (SizeType numElements) noexcept
+    void clear (size_t numElements) noexcept
     {
-        zeromem (data, sizeof (ElementType) * static_cast<size_t> (numElements));
+        zeromem (data, sizeof (ElementType) * numElements);
     }
 
     /** This typedef can be used to get the type of the heapblock's elements. */
@@ -300,7 +293,7 @@ public:
 
 private:
     //==============================================================================
-    ElementType* data = nullptr;
+    ElementType* data;
 
     void throwOnAllocationFailure() const
     {
@@ -317,4 +310,5 @@ private:
    #endif
 };
 
-} // namespace juce
+
+#endif   // JUCE_HEAPBLOCK_H_INCLUDED

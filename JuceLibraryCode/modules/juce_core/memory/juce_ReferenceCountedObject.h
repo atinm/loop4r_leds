@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_REFERENCECOUNTEDOBJECT_H_INCLUDED
+#define JUCE_REFERENCECOUNTEDOBJECT_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -37,7 +46,7 @@ namespace juce
 
         // This is a neat way of declaring a typedef for a pointer class,
         // rather than typing out the full templated name each time..
-        using Ptr = ReferenceCountedObjectPtr<MyClass>;
+        typedef ReferenceCountedObjectPtr<MyClass> Ptr;
     };
 
     MyClass::Ptr p = new MyClass();
@@ -54,8 +63,6 @@ namespace juce
     version, use SingleThreadedReferenceCountedObject instead.
 
     @see ReferenceCountedObjectPtr, ReferenceCountedArray, SingleThreadedReferenceCountedObject
-
-    @tags{Core}
 */
 class JUCE_API  ReferenceCountedObject
 {
@@ -101,15 +108,6 @@ protected:
     /** Creates the reference-counted object (with an initial ref count of zero). */
     ReferenceCountedObject() {}
 
-    /** Copying from another object does not affect this one's reference-count. */
-    ReferenceCountedObject (const ReferenceCountedObject&) noexcept {}
-    /** Copying from another object does not affect this one's reference-count. */
-    ReferenceCountedObject (ReferenceCountedObject&&) noexcept {}
-    /** Copying from another object does not affect this one's reference-count. */
-    ReferenceCountedObject& operator= (const ReferenceCountedObject&) noexcept  { return *this; }
-    /** Copying from another object does not affect this one's reference-count. */
-    ReferenceCountedObject& operator= (ReferenceCountedObject&&) noexcept       { return *this; }
-
     /** Destructor. */
     virtual ~ReferenceCountedObject()
     {
@@ -127,8 +125,10 @@ protected:
 
 private:
     //==============================================================================
-    Atomic<int> refCount { 0 };
+    Atomic <int> refCount;
+
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
+    JUCE_DECLARE_NON_COPYABLE (ReferenceCountedObject)
 };
 
 
@@ -142,8 +142,6 @@ private:
     For more details on how to use it, see the ReferenceCountedObject class notes.
 
     @see ReferenceCountedObject, ReferenceCountedObjectPtr, ReferenceCountedArray
-
-    @tags{Core}
 */
 class JUCE_API  SingleThreadedReferenceCountedObject
 {
@@ -187,16 +185,7 @@ public:
 protected:
     //==============================================================================
     /** Creates the reference-counted object (with an initial ref count of zero). */
-    SingleThreadedReferenceCountedObject() {}
-
-    /** Copying from another object does not affect this one's reference-count. */
-    SingleThreadedReferenceCountedObject (const SingleThreadedReferenceCountedObject&) {}
-    /** Copying from another object does not affect this one's reference-count. */
-    SingleThreadedReferenceCountedObject (SingleThreadedReferenceCountedObject&&) {}
-    /** Copying from another object does not affect this one's reference-count. */
-    SingleThreadedReferenceCountedObject& operator= (const SingleThreadedReferenceCountedObject&) { return *this; }
-    /** Copying from another object does not affect this one's reference-count. */
-    SingleThreadedReferenceCountedObject& operator= (SingleThreadedReferenceCountedObject&&) { return *this; }
+    SingleThreadedReferenceCountedObject() : refCount (0)  {}
 
     /** Destructor. */
     virtual ~SingleThreadedReferenceCountedObject()
@@ -207,8 +196,10 @@ protected:
 
 private:
     //==============================================================================
-    int refCount = 0;
+    int refCount;
+
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
+    JUCE_DECLARE_NON_COPYABLE (SingleThreadedReferenceCountedObject)
 };
 
 
@@ -228,28 +219,25 @@ private:
     @code
     struct MyClass  : public ReferenceCountedObject
     {
-        using Ptr = ReferenceCountedObjectPtr<MyClass>;
+        typedef ReferenceCountedObjectPtr<MyClass> Ptr;
         ...
-    }
     @endcode
 
     @see ReferenceCountedObject, ReferenceCountedObjectArray
-
-    @tags{Core}
 */
-template <class ObjectType>
+template <class ReferenceCountedObjectClass>
 class ReferenceCountedObjectPtr
 {
 public:
     /** The class being referenced by this pointer. */
-    using ReferencedType = ObjectType;
+    typedef ReferenceCountedObjectClass ReferencedType;
 
     //==============================================================================
     /** Creates a pointer to a null object. */
-    ReferenceCountedObjectPtr() noexcept {}
-
-    /** Creates a pointer to a null object. */
-    ReferenceCountedObjectPtr (decltype (nullptr)) noexcept {}
+    ReferenceCountedObjectPtr() noexcept
+        : referencedObject (nullptr)
+    {
+    }
 
     /** Creates a pointer to an object.
         This will increment the object's reference-count.
@@ -259,6 +247,14 @@ public:
     {
         incIfNotNull (refCountedObject);
     }
+
+   #if JUCE_COMPILER_SUPPORTS_NULLPTR
+    /** Creates a pointer to a null object. */
+    ReferenceCountedObjectPtr (decltype (nullptr)) noexcept
+        : referencedObject (nullptr)
+    {
+    }
+   #endif
 
     /** Copies another pointer.
         This will increment the object's reference-count.
@@ -274,7 +270,7 @@ public:
     */
     template <typename Convertible>
     ReferenceCountedObjectPtr (const ReferenceCountedObjectPtr<Convertible>& other) noexcept
-        : referencedObject (other.get())
+        : referencedObject (static_cast<ReferencedType*> (other.get()))
     {
         incIfNotNull (referencedObject);
     }
@@ -295,7 +291,7 @@ public:
     template <typename Convertible>
     ReferenceCountedObjectPtr& operator= (const ReferenceCountedObjectPtr<Convertible>& other)
     {
-        return operator= (other.get());
+        return operator= (static_cast<ReferencedType*> (other.get()));
     }
 
     /** Changes this pointer to point at a different object.
@@ -303,12 +299,12 @@ public:
         The reference count of the old object is decremented, and it might be
         deleted if it hits zero. The new object's count is incremented.
     */
-    ReferenceCountedObjectPtr& operator= (ReferencedType* newObject)
+    ReferenceCountedObjectPtr& operator= (ReferencedType* const newObject)
     {
         if (referencedObject != newObject)
         {
             incIfNotNull (newObject);
-            auto* oldObject = referencedObject;
+            ReferencedType* const oldObject = referencedObject;
             referencedObject = newObject;
             decIfNotNull (oldObject);
         }
@@ -316,6 +312,7 @@ public:
         return *this;
     }
 
+   #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     /** Takes-over the object from another pointer. */
     ReferenceCountedObjectPtr (ReferenceCountedObjectPtr&& other) noexcept
         : referencedObject (other.referencedObject)
@@ -329,6 +326,7 @@ public:
         std::swap (referencedObject, other.referencedObject);
         return *this;
     }
+   #endif
 
     /** Destructor.
         This will decrement the object's reference-count, which will cause the
@@ -364,7 +362,7 @@ public:
 
 private:
     //==============================================================================
-    ReferencedType* referencedObject = nullptr;
+    ReferencedType* referencedObject;
 
     static void incIfNotNull (ReferencedType* o) noexcept
     {
@@ -382,45 +380,46 @@ private:
 
 //==============================================================================
 /** Compares two ReferenceCountedObjectPtrs. */
-template <typename ObjectType>
-bool operator== (const ReferenceCountedObjectPtr<ObjectType>& object1, ObjectType* const object2) noexcept
+template <typename ReferenceCountedObjectClass>
+bool operator== (const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object1, ReferenceCountedObjectClass* const object2) noexcept
 {
     return object1.get() == object2;
 }
 
 /** Compares two ReferenceCountedObjectPtrs. */
-template <typename ObjectType>
-bool operator== (const ReferenceCountedObjectPtr<ObjectType>& object1, const ReferenceCountedObjectPtr<ObjectType>& object2) noexcept
+template <typename ReferenceCountedObjectClass>
+bool operator== (const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object1, const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object2) noexcept
 {
     return object1.get() == object2.get();
 }
 
 /** Compares two ReferenceCountedObjectPtrs. */
-template <typename ObjectType>
-bool operator== (ObjectType* object1, const ReferenceCountedObjectPtr<ObjectType>& object2) noexcept
+template <typename ReferenceCountedObjectClass>
+bool operator== (ReferenceCountedObjectClass* object1, const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object2) noexcept
 {
     return object1 == object2.get();
 }
 
 /** Compares two ReferenceCountedObjectPtrs. */
-template <typename ObjectType>
-bool operator!= (const ReferenceCountedObjectPtr<ObjectType>& object1, const ObjectType* object2) noexcept
+template <typename ReferenceCountedObjectClass>
+bool operator!= (const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object1, const ReferenceCountedObjectClass* object2) noexcept
 {
     return object1.get() != object2;
 }
 
 /** Compares two ReferenceCountedObjectPtrs. */
-template <typename ObjectType>
-bool operator!= (const ReferenceCountedObjectPtr<ObjectType>& object1, const ReferenceCountedObjectPtr<ObjectType>& object2) noexcept
+template <typename ReferenceCountedObjectClass>
+bool operator!= (const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object1, const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object2) noexcept
 {
     return object1.get() != object2.get();
 }
 
 /** Compares two ReferenceCountedObjectPtrs. */
-template <typename ObjectType>
-bool operator!= (ObjectType* object1, const ReferenceCountedObjectPtr<ObjectType>& object2) noexcept
+template <typename ReferenceCountedObjectClass>
+bool operator!= (ReferenceCountedObjectClass* object1, const ReferenceCountedObjectPtr<ReferenceCountedObjectClass>& object2) noexcept
 {
     return object1 != object2.get();
 }
 
-} // namespace juce
+
+#endif   // JUCE_REFERENCECOUNTEDOBJECT_H_INCLUDED

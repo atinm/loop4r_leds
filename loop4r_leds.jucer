@@ -13,12 +13,12 @@
         <CONFIGURATION isDebug="0" name="Release"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_core" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_events" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_data_structures" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_audio_basics" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_audio_devices" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_osc" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_events" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_data_structures" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_osc" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
     <LINUX_MAKE targetFolder="Builds/LinuxMakefile" extraDefs="JUCE_USE_CURL=1&#10;JUCE_ALSA=1&#10;JUCE_JACK=1"
@@ -28,12 +28,12 @@
         <CONFIGURATION isDebug="0" name="Release"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_core" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_events" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_data_structures" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_audio_basics" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_audio_devices" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
-        <MODULEPATH id="juce_osc" path="../../../../Volumes/Data/srcs/JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_events" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_data_structures" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
+        <MODULEPATH id="juce_osc" path="../../../../Volumes/Data/srcs/JUCE-4.3.1/modules"/>
       </MODULEPATHS>
     </LINUX_MAKE>
   </EXPORTFORMATS>

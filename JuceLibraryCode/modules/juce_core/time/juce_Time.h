@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_TIME_H_INCLUDED
+#define JUCE_TIME_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -30,8 +39,6 @@ namespace juce
     Internally, the time is stored at millisecond precision.
 
     @see RelativeTime
-
-    @tags{Core}
 */
 class JUCE_API  Time
 {
@@ -230,7 +237,7 @@ public:
         - %m  is replaced by the month as a decimal number [01,12].
         - %M  is replaced by the minute as a decimal number [00,59].
         - %p  is replaced by the locale's equivalent of either a.m. or p.m.
-        - %S  is replaced by the second as a decimal number [00,60].
+        - %S  is replaced by the second as a decimal number [00,61].
         - %U  is replaced by the week number of the year (Sunday as the first day of the week) as a decimal number [00,53].
         - %w  is replaced by the weekday as a decimal number [0,6], with 0 representing Sunday.
         - %W  is replaced by the week number of the year (Monday as the first day of the week) as a decimal number [00,53]. All days in a new year preceding the first Monday are considered to be in week 0.
@@ -302,7 +309,7 @@ public:
 
     /** Returns the number of millisecs since a fixed event (usually system startup).
 
-        This returns a monotonically increasing value which is unaffected by changes to the
+        This returns a monotonically increasing value which it unaffected by changes to the
         system clock. It should be accurate to within a few millisecs, depending on platform,
         hardware, etc.
 
@@ -406,4 +413,5 @@ JUCE_API bool operator>  (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
 JUCE_API bool operator>= (Time time1, Time time2) noexcept;
 
-} // namespace juce
+
+#endif   // JUCE_TIME_H_INCLUDED

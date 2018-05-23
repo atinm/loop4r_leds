@@ -2,26 +2,34 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_INTERPROCESSCONNECTION_H_INCLUDED
+#define JUCE_INTERPROCESSCONNECTION_H_INCLUDED
 
 class InterprocessConnectionServer;
 class MemoryBlock;
@@ -44,8 +52,6 @@ class MemoryBlock;
     InterprocessConnectionServer class.
 
     @see InterprocessConnectionServer, Socket, NamedPipe
-
-    @tags{Events}
 */
 class JUCE_API  InterprocessConnection
 {
@@ -124,10 +130,10 @@ public:
     bool isConnected() const;
 
     /** Returns the socket that this connection is using (or nullptr if it uses a pipe). */
-    StreamingSocket* getSocket() const noexcept                 { return socket.get(); }
+    StreamingSocket* getSocket() const noexcept                 { return socket; }
 
     /** Returns the pipe that this connection is using (or nullptr if it uses a socket). */
-    NamedPipe* getPipe() const noexcept                         { return pipe.get(); }
+    NamedPipe* getPipe() const noexcept                         { return pipe; }
 
     /** Returns the name of the machine at the other end of this connection.
         This may return an empty string if the name is unknown.
@@ -178,13 +184,15 @@ public:
 
 private:
     //==============================================================================
+    WeakReference<InterprocessConnection>::Master masterReference;
+    friend class WeakReference<InterprocessConnection>;
     CriticalSection pipeAndSocketLock;
-    std::unique_ptr<StreamingSocket> socket;
-    std::unique_ptr<NamedPipe> pipe;
-    bool callbackConnectionState = false;
+    ScopedPointer<StreamingSocket> socket;
+    ScopedPointer<NamedPipe> pipe;
+    bool callbackConnectionState;
     const bool useMessageThread;
     const uint32 magicMessageHeader;
-    int pipeReceiveMessageTimeout = -1;
+    int pipeReceiveMessageTimeout;
 
     friend class InterprocessConnectionServer;
     void initialiseWithSocket (StreamingSocket*);
@@ -193,18 +201,16 @@ private:
     void connectionMadeInt();
     void connectionLostInt();
     void deliverDataInt (const MemoryBlock&);
-    bool readNextMessage();
-    int readData (void*, int);
+    bool readNextMessageInt();
 
     struct ConnectionThread;
     friend struct ConnectionThread;
     friend struct ContainerDeletePolicy<ConnectionThread>;
-    std::unique_ptr<ConnectionThread> thread;
+    ScopedPointer<ConnectionThread> thread;
     void runThread();
     int writeData (void*, int);
 
-    JUCE_DECLARE_WEAK_REFERENCEABLE (InterprocessConnection)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InterprocessConnection)
 };
 
-} // namespace juce
+#endif   // JUCE_INTERPROCESSCONNECTION_H_INCLUDED

@@ -2,26 +2,35 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2017 - ROLI Ltd.
+   Copyright (c) 2016 - ROLI Ltd.
 
-   JUCE is an open source library subject to commercial or open-source
-   licensing.
+   Permission is granted to use this software under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license/
 
-   The code included in this file is provided under the terms of the ISC license
-   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   To use, copy, modify, and/or distribute this software for any purpose with or
-   without fee is hereby granted provided that the above copyright notice and
-   this permission notice appear in all copies.
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
 
-   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
-   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
-   DISCLAIMED.
+   THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD
+   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+   FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+   OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+   USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+   TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+   OF THIS SOFTWARE.
+
+   -----------------------------------------------------------------------------
+
+   To release a closed-source product which uses other parts of JUCE not
+   licensed under the ISC terms, commercial licenses are available: visit
+   www.juce.com for more information.
 
   ==============================================================================
 */
 
-namespace juce
-{
+#ifndef JUCE_BUFFERINGAUDIOSOURCE_H_INCLUDED
+#define JUCE_BUFFERINGAUDIOSOURCE_H_INCLUDED
+
 
 //==============================================================================
 /**
@@ -32,8 +41,6 @@ namespace juce
     directly, or use it indirectly using an AudioTransportSource.
 
     @see PositionableAudioSource, AudioTransportSource
-
-    @tags{Audio}
 */
 class JUCE_API  BufferingAudioSource  : public PositionableAudioSource,
                                         private TimeSliceClient
@@ -102,12 +109,12 @@ private:
     OptionalScopedPointer<PositionableAudioSource> source;
     TimeSliceThread& backgroundThread;
     int numberOfSamplesToBuffer, numberOfChannels;
-    AudioBuffer<float> buffer;
+    AudioSampleBuffer buffer;
     CriticalSection bufferStartPosLock;
     WaitableEvent bufferReadyEvent;
-    std::atomic<int64> bufferValidStart { 0 }, bufferValidEnd { 0 }, nextPlayPos { 0 };
-    double sampleRate = 0;
-    bool wasSourceLooping = false, isPrepared = false, prefillBuffer;
+    int64 volatile bufferValidStart, bufferValidEnd, nextPlayPos;
+    double volatile sampleRate;
+    bool wasSourceLooping, isPrepared, prefillBuffer;
 
     bool readNextBufferChunk();
     void readBufferSection (int64 start, int length, int bufferOffset);
@@ -116,4 +123,5 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferingAudioSource)
 };
 
-} // namespace juce
+
+#endif   // JUCE_BUFFERINGAUDIOSOURCE_H_INCLUDED
