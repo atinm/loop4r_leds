@@ -28,6 +28,7 @@
  */
 
 #include "../JuceLibraryCode/JuceHeader.h"
+#include <alsa/asoundlib.h>
 #include <sstream>
 
 
@@ -36,7 +37,6 @@ enum CommandIndex
 {
     NONE,
     LIST,
-    PANIC,
     DEVICE_OUT,
     CHANNEL,
     OSC_IN,
@@ -91,7 +91,7 @@ struct LED {
     bool on_;
     int timer_;
     LedStates state_;
-
+    
     void clear()
     {
         on_ = false;
@@ -106,14 +106,13 @@ inline float sign(float value)
 }
 
 class loop4r_ledsApplication  : public JUCEApplicationBase,
-    public Timer, private OSCReceiver::Listener<OSCReceiver::MessageLoopCallback>
+public Timer, private OSCReceiver::Listener<OSCReceiver::MessageLoopCallback>
 {
 public:
     //==============================================================================
     loop4r_ledsApplication()
     {
         commands_.add({"dout",  "device out",       DEVICE_OUT,         1, "name",           "Set the name of the MIDI output port"});
-        commands_.add({"panic", "",                 PANIC,              0, "",               "Sends all possible Note Offs and relevant panic CCs"});
         commands_.add({"list",  "",                 LIST,               0, "",               "Lists the MIDI ports"});
         commands_.add({"ch",    "channel",          CHANNEL,            1, "number",         "Set MIDI channel for the commands (0-16), defaults to 0"});
         commands_.add({"oin",   "osc in",           OSC_IN,             1, "number",         "OSC receive port"});
@@ -178,29 +177,13 @@ public:
     
     void timerCallback() override
     {
+        int err;
         if (midiOutName_.isNotEmpty() && midiOut_ == nullptr)
         {
-            int index = MidiOutput::getDevices().indexOf(midiOutName_);
-            if (index >= 0)
+            err = snd_rawmidi_open(NULL,&midiOut_, midiOutName_.toRawUTF8(), 0);
+            if (err)
             {
-                midiOut_ = MidiOutput::openDevice(index);
-            }
-            else
-            {
-                StringArray devices = MidiOutput::getDevices();
-                for (int i = 0; i < devices.size(); ++i)
-                {
-                    if (devices[i].containsIgnoreCase(midiOutName_))
-                    {
-                        midiOut_ = MidiOutput::openDevice(i);
-                        midiOutName_ = devices[i];
-                        break;
-                    }
-                }
-            }
-            if (midiOut_ == nullptr)
-            {
-                std::cerr << "Couldn't find MIDI output port \"" << midiOutName_ << "\"" << std::endl;
+                std::cerr << "Couldn't open MIDI output port \"" << midiOutName_ << "\"" << std::endl;
             }
             else
             {
@@ -266,7 +249,7 @@ public:
         }
     }
     
-        void shutdown() override
+    void shutdown() override
     {
         // Add your application's shutdown code here..
         
@@ -379,23 +362,6 @@ private:
         parseParameters(parameters);
     }
     
-    void sendMidiMessage(MidiOutput *midiOut, const MidiMessage&& msg)
-    {
-        if (midiOut)
-        {
-            midiOut->sendMessageNow(msg);
-        }
-        else
-        {
-            static bool missingOutputPortWarningPrinted = false;
-            if (!missingOutputPortWarningPrinted)
-            {
-                std::cerr << "No valid MIDI output port was specified for some of the messages" << std::endl;
-                missingOutputPortWarningPrinted = true;
-            }
-        }
-    }
-    
     bool checkChannel(const MidiMessage& msg, int channel)
     {
         return channel == 0 || msg.getChannel() == channel;
@@ -487,49 +453,19 @@ private:
                 break;
             case DEVICE_OUT:
             {
+                int err;
                 midiOut_ = nullptr;
                 midiOutName_ = cmd.opts_[0];
-                int index = MidiOutput::getDevices().indexOf(midiOutName_);
-                if (index >= 0)
+                err = snd_rawmidi_open(NULL,&midiOut_, midiOutName_.toRawUTF8(), 0);
+                if (err)
                 {
-                    midiOut_ = MidiOutput::openDevice(index);
-                }
-                else
-                {
-                    StringArray devices = MidiOutput::getDevices();
-                    for (int i = 0; i < devices.size(); ++i)
-                    {
-                        if (devices[i].containsIgnoreCase(midiOutName_))
-                        {
-                            midiOut_ = MidiOutput::openDevice(i);
-                            midiOutName_ = devices[i];
-                            break;
-                        }
-                    }
-                }
-                if (midiOut_ == nullptr)
-                {
-                    std::cerr << "Couldn't find MIDI output port \"" << midiOutName_ << "\"" << std::endl;
+                    std::cerr << "Couldn't open MIDI output port \"" << midiOutName_ << "\"" << std::endl;
                 }
                 else
                 {
                     // initialize the pedal leds to off
                     for (auto i=0; i<NUM_LED_PEDALS; i++)
                         ledOff(i);
-                }
-                break;
-            }
-            case PANIC:
-            {
-                for (int ch = 1; ch <= 16; ++ch)
-                {
-                    sendMidiMessage(midiOut_, MidiMessage::controllerEvent(ch, 64, 0));
-                    sendMidiMessage(midiOut_, MidiMessage::controllerEvent(ch, 120, 0));
-                    sendMidiMessage(midiOut_, MidiMessage::controllerEvent(ch, 123, 0));
-                    for (int note = 0; note <= 127; ++note)
-                    {
-                        sendMidiMessage(midiOut_, MidiMessage::noteOff(ch, note, (uint8)0));
-                    }
                 }
                 break;
             }
@@ -645,13 +581,27 @@ private:
     }
     
     void ledOn(int pedalIdx) {
+        int wrote;
         leds_.getReference(pedalIdx).on_ = true;
-        sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 106, ledNumber(pedalIdx)));
+        //sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 106, ledNumber(pedalIdx)));
+        unsigned char ch[]={MIDI_CMD_CONTROL, 106, ledNumber(pedalIdx)};
+        wrote = snd_rawmidi_write(midiOut_, &ch, sizeof(ch));
+        if (wrote != sizeof(ch))
+        {
+            std::cerr << "Could not write CC " << (int)106 << " " << (int)ledNumber(pedalIdx) << std::endl;
+        }
     }
     
     void ledOff(int pedalIdx) {
+        int wrote;
         leds_.getReference(pedalIdx).on_ = false;
-        sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 107, ledNumber(pedalIdx)));
+        //sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 107, ledNumber(pedalIdx)));
+        unsigned char ch[]={MIDI_CMD_CONTROL, 107, ledNumber(pedalIdx)};
+        wrote = snd_rawmidi_write(midiOut_, &ch, sizeof(ch));
+        if (wrote != sizeof(ch))
+        {
+            std::cerr << "Could not write CC " << (int)107 << " " << (int)ledNumber(pedalIdx) << std::endl;
+        }
     }
     
     void updateLeds()
@@ -664,7 +614,14 @@ private:
     
     void updateLedState(LED& led)
     {
-        sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, led.on_? 106 : 107, ledNumber(led.index_)));
+        int wrote;
+        //sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, led.on_? 106 : 107, ledNumber(led.index_)));
+        unsigned char ch[]={MIDI_CMD_CONTROL,(unsigned char)(led.on_?106:107),ledNumber(led.index_)};
+        wrote = snd_rawmidi_write(midiOut_, &ch, sizeof(ch));
+        if (wrote != sizeof(ch))
+        {
+            std::cerr << "Could not write CC " << (int)(led.on_?106:107) << " " << (int)ledNumber(led.index_) << std::endl;
+        }
     }
     
     void getCurrentState(int index)
@@ -674,7 +631,7 @@ private:
                        (String) "127.0.0.1",
                        (int) currentReceivePort_,
                        (String) "/led");
-                       
+        
         oscSender.send(buf + "/display",
                        (String) "127.0.0.1",
                        (int) currentReceivePort_,
@@ -884,12 +841,35 @@ private:
                 return;
             }
             
+            int wrote;
             if (selectedLoop / 10 > 0)
-                sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 113, (uint8)(selectedLoop / 10)));
+            {
+                unsigned char ch[]={MIDI_CMD_CONTROL, 113, (unsigned char)(selectedLoop / 10)};
+                wrote = snd_rawmidi_write(midiOut_, &ch, sizeof(ch));
+                if (wrote != sizeof(ch))
+                {
+                    std::cerr << "Could not write CC " << (int)113 << " " << (int)(selectedLoop / 10) << std::endl;
+                }
+                //sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 113, (uint8)(selectedLoop / 10)));
+            }
             else
-                sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 113, (uint8)0));
+            {
+                unsigned char ch[]={MIDI_CMD_CONTROL, 113, 0};
+                wrote = snd_rawmidi_write(midiOut_, &ch, sizeof(ch));
+                if (wrote != sizeof(ch))
+                {
+                    std::cerr << "Could not write CC " << (int)113 << " " << 0 << std::endl;
+                }
+                //sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 113, (uint8)0));
+            }
             
-            sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 114, (uint8)(selectedLoop % 10)));
+            unsigned char ch[]={MIDI_CMD_CONTROL, 114, (unsigned char)(selectedLoop % 10)};
+            wrote = snd_rawmidi_write(midiOut_, &ch, sizeof(ch));
+            if (wrote != sizeof(ch))
+            {
+                std::cerr << "Could not write CC " << (int)113 << " " << (int)(selectedLoop % 10) << std::endl;
+            }
+            //sendMidiMessage(midiOut_, MidiMessage::controllerEvent(channel_, 114, (uint8)(selectedLoop % 10)));
         }
     }
     
@@ -1098,7 +1078,7 @@ private:
     bool useHexadecimalsByDefault_;
     
     String midiOutName_;
-    ScopedPointer<MidiOutput> midiOut_;
+    snd_rawmidi_t *midiOut_ = 0;
     
     int ledCount_;
     bool pinged_;
